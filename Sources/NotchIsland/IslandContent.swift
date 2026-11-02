@@ -7,9 +7,12 @@ final class IslandModel: ObservableObject {
     @Published var view: IslandView = .rest
     @Published var expanded = false
     @Published var tray = false
+    /// v0.2.0: the host's tray height below the notch (nil = v0.1 flat edge)
+    @Published var trayH: Double?
+    @Published var trayW: Double = Layout.trayW
     @Published var notch = NotchMetrics(width: fakeNotchWidth, height: 32, hasNotch: false)
 
-    var size: IslandSize { islandSize(view, expanded: expanded, tray: tray, notch: notch) }
+    var size: IslandSize { islandSize(view, expanded: expanded, tray: tray, notch: notch, trayH: trayH, trayW: trayW) }
 }
 
 enum Emit {
@@ -100,6 +103,16 @@ struct IslandContent: View {
                 if model.expanded && !model.tray && !v.isRest {
                     detail(v)
                         .transition(.opacity.combined(with: .offset(y: -6)))
+                }
+                if model.expanded && !model.tray && v.isRest {
+                    // v0.2.0: the peek when nothing is running (runs, permissions and meetings bring their own lines)
+                    Text("Nothing running")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundColor(Color.white.opacity(0.5))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 2)
+                        .transition(.opacity)
                 }
                 Spacer(minLength: 0)
             }

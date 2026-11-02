@@ -119,7 +119,7 @@ final class IslandController {
         watchScreens()
         watchMouse()
         readStdin()
-        Emit.send("ready", ["v": protocolVersion, "notch": notchJSON(), "hz": hz])
+        Emit.send("ready", ["v": protocolVersion, "notch": notchJSON(), "hz": hz, "caps": capabilities, "version": helperVersion])
     }
 
     // MARK: screens
@@ -216,9 +216,12 @@ final class IslandController {
         apply(animated: true)
     }
 
-    func setTray(_ open: Bool) {
-        guard model.tray != open else { return }
+    func setTray(_ open: Bool, w: Double? = nil, h: Double? = nil) {
+        let newH = open ? h : nil
+        guard model.tray != open || model.trayH != newH || (w != nil && model.trayW != w!) else { return }
         model.tray = open
+        model.trayH = newH
+        if let w = w { model.trayW = w }
         if !open { gate.reset() }
         model.expanded = gate.hovering || (model.view.open ?? false)
         apply(animated: true)
@@ -264,7 +267,8 @@ final class IslandController {
             case .leave: Emit.send("leave")
             }
             let want = gate.hovering || (model.view.open ?? false)
-            if want != model.expanded && !model.view.isRest {
+            // v0.2.0: a hovered rest view peeks too ("Nothing running"), so hover always answers with a small grow
+            if want != model.expanded {
                 model.expanded = want
                 apply(animated: true)
             }
@@ -299,6 +303,7 @@ final class IslandController {
             switch msg {
             case let .view(v): setView(v)
             case let .tray(open): setTray(open)
+            case let .traySized(w, h): setTray(true, w: w, h: h)
             case .ping: Emit.send("pong")
             case .quit: NSApp.terminate(nil)
             }

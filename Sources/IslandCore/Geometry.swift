@@ -44,23 +44,38 @@ public enum Layout {
     public static let askW = 420.0
     public static let meetW = 360.0
     public static let trayW = 520.0
-    /// the concave corner where the island meets the menu bar
-    public static let shoulder = 10.0
-    /// the helper's window: wide and tall enough for the biggest island plus spring overshoot
+    /// the concave corner where the island meets the menu bar (Dynamic Island style)
+    public static let shoulder = 12.0
+    /// the helper's window: wide and tall enough for the biggest island (the host's tray) plus spring overshoot
     public static let canvasW = 580.0
-    public static let canvasH = 200.0
+    public static let canvasH = 480.0
+    /// v0.2.0: the peek under a resting cursor when nothing is running ("Nothing running")
+    public static let peekExtra = 24.0
+    /// v0.2.0: bottom corner radius of the open tray
+    public static let trayR = 24.0
+    /// v0.2.0: the tallest tray the host may ask for (below the notch)
+    public static let trayMaxH = canvasH - 60
     public static let deckExtra = 54.0
     public static let askExtra = 92.0
     public static let meetExtra = 58.0
 }
 
 /// The island's size for what it shows. Compact = the notch plus two wings; expanded grows below it.
-public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: NotchMetrics) -> IslandSize {
+/// v0.2.0: `trayH` = the host's tray is open and this tall below the notch → the black shape IS the tray (one shape that
+/// springs from the notch, the host's transparent content fades in on top); `nil` keeps v0.1's flat tray edge. A rest
+/// view that is hovered (`expanded`) peeks: the notch plus wings and a short line ("Nothing running").
+public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: NotchMetrics, trayH: Double? = nil, trayW: Double = Layout.trayW) -> IslandSize {
     let nw = notch.width
     let nh = notch.height
     let compactW = min(Layout.trayW, nw + 2 * Layout.wing)
-    if tray { return IslandSize(w: Layout.trayW, h: nh, r: 0) }
-    if v.isRest { return IslandSize(w: nw, h: nh, r: notch.hasNotch ? 9 : nh / 2) }
+    if tray {
+        if let th = trayH, th > 0 { return IslandSize(w: max(compactW, min(Layout.canvasW - 2 * Layout.shoulder - 8, trayW)), h: nh + min(Layout.trayMaxH, th), r: Layout.trayR) }
+        return IslandSize(w: Layout.trayW, h: nh, r: 0)
+    }
+    if v.isRest {
+        if expanded { return IslandSize(w: compactW, h: nh + Layout.peekExtra, r: 16) }
+        return IslandSize(w: nw, h: nh, r: notch.hasNotch ? 9 : nh / 2)
+    }
     if !expanded { return IslandSize(w: compactW, h: nh, r: min(12, nh / 2)) }
     switch v.mode {
     case "ask":

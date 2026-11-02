@@ -5,10 +5,13 @@ import Foundation
 // Host → helper:
 //   {"t":"view","view":{...IslandView...}}   what the island should show
 //   {"t":"tray","open":true}                 the host's own panel is open below the island: become its top edge
+//   {"t":"tray","open":true,"w":520,"h":236} v0.2.0: become the tray itself (w × notch+h, rounded), springing open;
+//                                             the host's transparent content sits on top and fades in after
+//   {"t":"tray","open":false}                close (the host takes its content out first)
 //   {"t":"ping"}                             → {"ev":"pong"}
 //   {"t":"quit"}                             exit
 // Helper → host:
-//   {"ev":"ready","v":1,"notch":{"w":185,"h":32,"has":true},"hz":120}
+//   {"ev":"ready","v":1,"notch":{"w":185,"h":32,"has":true},"hz":120,"caps":["traySize","peek"],"version":"0.2.0"}
 //   {"ev":"screen","notch":{...}}            re-anchored (display, Space or wake change)
 //   {"ev":"hover"} / {"ev":"leave"}          the cursor rested on the island / left it
 //   {"ev":"click"}                           a click on the island (not on a button)
@@ -17,6 +20,9 @@ import Foundation
 // Closing stdin (the host quit or crashed) makes the helper exit.
 
 public let protocolVersion = 1
+public let helperVersion = "0.2.0"
+/// what this build can do beyond protocol 1 (the host checks these before relying on them)
+public let capabilities = ["traySize", "peek"]
 
 public struct AskInfo: Codable, Equatable {
     public var id: String
@@ -87,6 +93,8 @@ public struct IslandView: Codable, Equatable {
 public enum Inbound: Equatable {
     case view(IslandView)
     case tray(Bool)
+    /// v0.2.0: open as the tray itself, w × h below the notch
+    case traySized(w: Double, h: Double)
     case ping
     case quit
 }
@@ -95,6 +103,8 @@ private struct Envelope: Decodable {
     let t: String
     let view: IslandView?
     let open: Bool?
+    let w: Double?
+    let h: Double?
 }
 
 /// One line from the host → a message, or nil when it isn't one (ignored, never fatal).
@@ -107,6 +117,7 @@ public func decodeInbound(_ line: String) -> Inbound? {
         guard let v = env.view else { return nil }
         return .view(v)
     case "tray":
+        if env.open == true, let h = env.h, h > 0 { return .traySized(w: env.w ?? Layout.trayW, h: h) }
         return .tray(env.open ?? false)
     case "ping":
         return .ping

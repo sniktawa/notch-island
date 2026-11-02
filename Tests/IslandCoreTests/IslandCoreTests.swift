@@ -167,4 +167,25 @@ final class HoverTests: XCTestCase {
         g.reset()
         XCTAssertFalse(g.hovering)
     }
+
+    // v0.2.0: the shape IS the tray (one shape from the notch), and a hovered rest view peeks
+    func testTraySizedAndPeek() {
+        XCTAssertEqual(decodeInbound(#"{"t":"tray","open":true,"w":520,"h":236}"#), .traySized(w: 520, h: 236))
+        XCTAssertEqual(decodeInbound(#"{"t":"tray","open":true,"h":180}"#), .traySized(w: Layout.trayW, h: 180))
+        XCTAssertEqual(decodeInbound(#"{"t":"tray","open":false,"h":180}"#), .tray(false))
+        let tray = islandSize(.rest, expanded: false, tray: true, notch: notch, trayH: 236)
+        XCTAssertEqual(tray, IslandSize(w: Layout.trayW, h: 32 + 236, r: Layout.trayR))
+        let huge = islandSize(.rest, expanded: false, tray: true, notch: notch, trayH: 5000)
+        XCTAssertEqual(huge.h, 32 + Layout.trayMaxH)
+        XCTAssertLessThanOrEqual(huge.h, Layout.canvasH - 40)
+        XCTAssertLessThanOrEqual(huge.w + 2 * Layout.shoulder, Layout.canvasW)
+        let peek = islandSize(.rest, expanded: true, tray: false, notch: notch)
+        XCTAssertEqual(peek, IslandSize(w: 185 + 2 * Layout.wing, h: 32 + Layout.peekExtra, r: 16))
+        // the tray path keeps the same 9 elements (so it springs from the notch's path) and has shoulders
+        let p = islandPath(tray, canvasW: Layout.canvasW, canvasH: Layout.canvasH)
+        XCTAssertEqual(p.count, 9)
+        if case let .move(x, y) = p[0] { XCTAssertEqual(x, Layout.canvasW / 2 - Layout.trayW / 2 - Layout.shoulder); XCTAssertEqual(y, Layout.canvasH) } else { XCTFail("move first") }
+        XCTAssertTrue(capabilities.contains("traySize"))
+        XCTAssertEqual(helperVersion, "0.2.0")
+    }
 }

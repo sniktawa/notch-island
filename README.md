@@ -13,6 +13,10 @@ app) that wants a native-feeling notch surface without writing AppKit itself.
 - Hover: rest about 0.3 s on the notch to open; a fast fly-by never opens it. Clicks outside the shape pass through.
 - States: compact pill (glyph + elapsed time), two-line activity view, Allow / Deny / Always, upcoming meeting with
   Join, and a flat "tray" edge for a host panel that opens below.
+- v0.2.0: `{"t":"tray","open":true,"w":…,"h":…}` makes the black shape the host's tray itself: one shape springs from
+  the notch to w × (notch + h) with rounded bottom corners and concave shoulders, so the host can draw only its
+  content (transparent) on top and fade it in once the shape is mostly open. Hovering the resting notch peeks
+  ("Nothing running"). `ready` reports `caps` and `version`.
 
 ## Protocol
 
@@ -24,6 +28,8 @@ Host → helper, one JSON object per line:
 {"t":"view","view":{"mode":"meeting","meeting":{"title":"Design review","when":"Starts in 4 min","join":true}}}
 {"t":"view","view":{"mode":"rest"}}
 {"t":"tray","open":true}
+{"t":"tray","open":true,"w":520,"h":236}
+{"t":"tray","open":false}
 {"t":"ping"}
 {"t":"quit"}
 ```
