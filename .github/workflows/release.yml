@@ -1,0 +1,69 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: swift --version && sw_vers
+
+      - name: Test
+        run: swift test
+
+      - name: Build (release, arm64)
+        run: swift build -c release --arch arm64
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          BIN_DIR="$(swift build -c release --arch arm64 --show-bin-path)"
+          mkdir -p out
+          cp "$BIN_DIR/NotchIsland" out/NotchIsland-arm64
+          chmod 755 out/NotchIsland-arm64
+          lipo -info out/NotchIsland-arm64
+          file out/NotchIsland-arm64
+          otool -l out/NotchIsland-arm64 | grep -A4 LC_BUILD_VERSION | head -8
+          cd out && shasum -a 256 NotchIsland-arm64 | tee NotchIsland-arm64.sha256
+
+      - name: Smoke run (starts, answers ping, exits when stdin closes)
+        run: |
+          set -euo pipefail
+          printf '{"t":"ping"}\n{"t":"view","view":{"mode":"deck","glyph":"read","now":"Working","startedAt":0}}\n{"t":"quit"}\n' > in.txt
+          ( ( sleep 3; cat in.txt; sleep 2 ) | ./out/NotchIsland-arm64 > smoke.txt 2>&1 ) &
+          PID=$!
+          for i in $(seq 1 20); do kill -0 "$PID" 2>/dev/null || break; sleep 1; done
+          kill "$PID" 2>/dev/null || true
+          cat smoke.txt
+          grep -q '"ev":"ready"' smoke.txt
+          grep -q '"ev":"pong"' smoke.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NotchIsland-arm64
+          path: out/
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" out/NotchIsland-arm64 out/NotchIsland-arm64.sha256 --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$GITHUB_REF_NAME" out/NotchIsland-arm64 out/NotchIsland-arm64.sha256 \
+              --title "$GITHUB_REF_NAME" --notes "arm64 build of ${GITHUB_SHA}. sha256: $(cut -d' ' -f1 out/NotchIsland-arm64.sha256)" \
+              --repo "$GITHUB_REPOSITORY"
+          fi
