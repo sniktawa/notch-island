@@ -170,6 +170,7 @@ final class HoverTests: XCTestCase {
 
     // v0.2.0: the shape IS the tray (one shape from the notch), and a hovered rest view peeks
     func testTraySizedAndPeek() {
+        let notch = NotchMetrics(width: 185, height: 32, hasNotch: true)
         XCTAssertEqual(decodeInbound(#"{"t":"tray","open":true,"w":520,"h":236}"#), .traySized(w: 520, h: 236))
         XCTAssertEqual(decodeInbound(#"{"t":"tray","open":true,"h":180}"#), .traySized(w: Layout.trayW, h: 180))
         XCTAssertEqual(decodeInbound(#"{"t":"tray","open":false,"h":180}"#), .tray(false))

@@ -53,8 +53,9 @@ public enum Layout {
     public static let peekExtra = 24.0
     /// v0.2.0: bottom corner radius of the open tray
     public static let trayR = 24.0
-    /// v0.2.0: the tallest tray the host may ask for (below the notch)
-    public static let trayMaxH = canvasH - 60
+    /// v0.2.0: the tallest tray the host may ask for (below the notch); notch + tray stays 40 pt inside the canvas
+    /// for the open spring's overshoot, even under a tall (38 pt) notch
+    public static let trayMaxH = canvasH - 80
     public static let deckExtra = 54.0
     public static let askExtra = 92.0
     public static let meetExtra = 58.0
