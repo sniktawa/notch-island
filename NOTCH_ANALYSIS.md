@@ -217,7 +217,7 @@ Three rules apply to every bucket.
 
 1. **A send, a booking, and a payment wait for a tap on Allow.** The operator may draft, look up, and line the cards up. Join opens a meeting he already has. Mark-paid records a match he confirmed. None of these fire on hover, on a timer, on Always, or on a spoken “yes.”
 2. **Revenue stays off the wire and off the compact pill.** Company totals, Stripe, Shopify, and “what did we make this month” are for the Brain window when he asks. They are not written into an outbound prompt, and they are not drawn in the wings, which sit in every screen share. An open confirm card may show the single invoice figure he is matching.
-3. **Local first, and the helper stays a display.** New network calls do not get added to this process. Speech, screen capture, clipboard reads, and window control run in Brain, which already has the signing identity and the data. The line protocol carries short strings, ids, and file paths.
+3. **Local first.** The helper does not open a network connection. Speech, screen capture, and the microphone stay on Brain, which has the signed bundle and the usage strings. The line protocol carries short strings, ids, and file paths. Two narrow exceptions live in the helper because the window and the frame rate are there: it copies files he drops on the shelf, and it watches the folders Brain names so a progress bar can tick without a message on every frame.
 
 Effort is the size of the change. **S** is a field or a card on the existing modes. **M** crosses a few files in this repo and a real Brain wiring change. **L** is a new interaction model or a new OS permission.
 
@@ -289,13 +289,13 @@ The money desk proposes a match. The notch asks him to confirm it. Allow marks t
 
 **Operator command bar, and voice.**
 
-He says or types a job. Brain runs the operator and stacks approve cards. The bar itself is Brain’s tray content, not a second chat invented in SwiftUI.
+He says or types a job. Brain runs the operator and stacks approve cards. In v0.3.0 that sentence is the capture field on the island. A longer plan still comes back as cards, not as a second chat.
 
 *Walking back from the cove.* He taps the notch, or hits the shortcut Brain registered. The tray opens. He says “rebook Adam for next Thursday.” The wings switch to a plan glyph: “Checking Thursday.” Two cards come back, a text and an email. He sends one and skips one. Saying “send it” does not send it.
 
-*Fit.* Tray messages already exist (`traySize`). Brain focuses a field in its own window and runs the planner that 1.11 puts in front of search, `draftPrompt`, `lib/chat/text-turn.ts`, the portal’s draft invoice, and the calendar proposer. `decideAction` stays the gate. Voice uses Brain’s dictation pointed at the local model. If Apple’s speech recognizer is used, it is the on-device recognizer, with the microphone permission on the Brain app. The helper grows no text field in this release, which keeps the panel non-key. Shortcut: Electron `globalShortcut`, and Brain sends `tray`.
+*Fit.* The v0.3.0 capture field is this sentence box. A reminder writes the ledger. A job such as “rebook Adam” goes to the planner in front of search, `draftPrompt`, `lib/chat/text-turn.ts`, the portal’s draft invoice, and the calendar proposer, and comes back as ask cards. `decideAction` stays the gate. Speech stays on Brain’s on-device recognizer. The panel becomes key only while that field is open, then resigns. The shortcut is Electron `globalShortcut`.
 
-*Effort.* M for the tray wiring and the deck status of a running plan. L if on-device speech is new in Brain.
+*Effort.* M for capture plus the deck status of a running plan. L if on-device speech is new in Brain. The field itself is specified under v0.3.0.
 
 *Risk.* A misfired phrase must not approve. The planner’s step cap and “show the plan before the drafts” rule stay. Microphone copy has to say the audio stays on the Mac. A cloud speech API is a breach of local-first.
 
@@ -371,17 +371,19 @@ CPU, memory, and battery as a deck he can peek, useful while a local model is lo
 
 *Risk.* Low. Keep it off the default rest state so the notch stays quiet.
 
-**Drop a file on the island.**
+**File shelf.** In v0.3.0. Detail and the wire format are in section 4.
 
-He drags a PDF onto the notch. The helper accepts the drop and emits the path. Brain files it on the deal or the invoice he confirms.
+He drags files onto the notch to park them, drags them back out into Finder, Mail, or Final Cut, and can name an action (“send to Ryan”, “file under LabTested”) that Brain turns into an approve card.
 
-*A client just AirDropped a PO.* He drops it on the notch. A card says “Attach to the Forest deal?” He taps Allow.
+*A PO lands in AirDrop during a grade.* He drops it on the housing. The wing shows “1”. He says “file under LabTested.” A card asks him to attach it to that business. The file also stays on the shelf so he can drag it onto the desktop himself.
 
-*Fit.* `NSDraggingDestination` on the tracking view, in `IslandController.swift`. Emit `{"ev":"drop","paths":[...]}`. Brain reads the files locally. This is one of the few features that has to live in the helper, because the helper is the window under the cursor. Cap: `drop`. No network upload.
+**Quick capture.** In v0.3.0.
 
-*Effort.* M.
+A shortcut, or a click on the open island, takes a note, a to-do, or a promise. Typed or spoken. It lands in Brain’s ledger and to-dos. “Remind me to send Forest the one-pager Thursday” stores the promise. It does not send the one-pager.
 
-*Risk.* A drop should not be processed by the model until he confirms which deal it belongs to. Paths only, and only files he dragged.
+**Progress.** In v0.3.0.
+
+Live bars for Final Cut and Premiere exports, browser and Finder downloads, Drive uploads, and incoming AirDrop, then a done state with Reveal in Finder. The bar ticks inside the helper. Brain hears start and done.
 
 ### Interactive
 
@@ -395,7 +397,7 @@ How his hands work. The island is already quiet on purpose (the fast-flick rule,
 
 **Swipe between moves.** A horizontal scroll or a three-finger swipe over the open island cycles the three moves and emits `action` id `focus`. Implement with the local mouse monitor already in `watchMouse`, not a gesture recognizer that steals scroll from the window below. Swipes only count while the panel is accepting events, which is while the cursor is on the shape. *Moment: the three morning lines, and he flicks to the one he will do first.* *Effort M. Risk: a swipe that dismisses a send card. Dismiss stays a button.*
 
-**Drag and drop.** Covered above as a useful feature. The interactive half is the hover target lighting up (a slightly wider path, same nine elements) so he can see the drop will land. *Effort folded into the drop.*
+**Drag and drop.** The shelf in v0.3.0 is the interaction: the shape lights up on `draggingEntered` (same nine path elements, a slightly wider pad), a drag out starts from a chip, and a click is not a drag. Swipe and the general activity stack stay in v0.4.0.
 
 **Drag the tray taller.** He pulls the bottom edge and the helper emits `trayResize` so Brain can grow its content. Easy to get wrong with the spring, and the host already chooses `h`. Skip until the sized-tray z-order is solid. *Effort M. Risk: fighting the host’s own height.*
 
@@ -427,58 +429,254 @@ The version numbers follow this repo, not Brain’s. Each one is a tag `v*` that
 
 Brain’s own release train (the version bump in the Hark workspace, `scripts/release.mjs`, no new billed workflow) is separate. The helper tag is what Brain pins. The useful work is half helper and half “Brain writes the lines it already knows how to mean.”
 
-### v0.3.0 — The morning, on the notch
+### v0.3.0 — The morning, the shelf, a capture, and the export bar
 
-Ship the smallest helper change that makes the 1.11 brief, the approve tap, the meeting, and the Zelle confirm feel native. Leave gestures, music, and the pet out.
+Ship the morning (three moves, approve tap, meeting countdown, Zelle confirm) and the three productivity pieces he picked: a file shelf, quick capture, and transfer progress. All three fit this tag. Progress is in scope because the bar is a heuristic plus a public file-progress subscription, not a private Final Cut API. None of them slip to 0.4.0.
 
-Helper:
+Gestures that are not the shelf (swipe, a general activity stack, music, the pet) stay later. The shelf, the capture field, and the progress bars are the hands he asked for now.
 
-- Ignore a `view` equal to the one already shown, so a chatty host does not restart the spring.
-- `peek` string and a numeric `badge` on the rest state, so the hover tells the truth.
+What stays true: a send, a booking, and a payment wait for Allow. A spoken “send it” does not send. Revenue stays off the wings and out of outbound prompts. `protocolVersion` stays `1`. Version string `0.3.0`.
+
+#### Shared helper work
+
+- Ignore a `view` whose geometry matches the one already shown, so a progress tick or a capture partial does not restart the spring. Text inside the same size updates in place.
+- `peek` string and a numeric `badge` on the rest state.
 - `MeetingInfo.id` and `MeetingInfo.startsAt`. The wing counts down locally. Join’s `action` includes the id.
-- `money` and `text` glyphs.
-- `screen` and `ready` include the panel frame in AppKit points, the display id, and the backing scale, so Brain can place the tray on the same housing.
-- A `settled` event when the open spring finishes, so Brain fades the tray in on a fact.
-- Cap list grows: `peekText`, `countdown`, `screenFrame`, `settled`. Version string `0.3.0`.
-- Tests in `IslandCoreTests` for the new decode, the countdown text, the equal-view rule (pure function), and the frame fields. The CI smoke test stays a ping.
+- Glyphs `money`, `text`, `shelf`, `capture`, `export`.
+- `screen` and `ready` include the panel frame in AppKit points, the display id, and the backing scale.
+- A `settled` event when an open spring finishes.
+- Shelf items and transfers are held beside the view, the way `tray` already is. An approve card still owns the body. A download can keep a thin bar in the wing underneath it.
+- Caps: `peekText`, `countdown`, `screenFrame`, `settled`, `moves`, `shelf`, `capture`, `progress`.
+- Tests in `IslandCoreTests` for every new decode, the countdown text, the equal-geometry rule, the shelf and progress structs, and the frame fields. The CI smoke test stays a ping.
 
-Brain, in the same week, against a helper that reports those caps. On an older helper, Brain keeps using bare `ask`, `deck`, `meeting`, and the flat tray.
+#### Brain, the morning (unchanged intent)
 
-- On `ready`, push the current three moves. If `peekText` is present, the rest peek is “3 moves” (or “Clear”). If it is absent, send a `deck` rather than leaving rest in place.
-- Approve cards for the drafted email, the drafted text, and the Zelle match. `open: true`. No `always`. Questions name the verb and the person. Zelle’s wing says “Paid?”. The amount is only in the open question.
-- The next meeting inside the lead time uses `startsAt` and a brief from the ledger with no revenue figures. Join carries the id Brain just sent.
-- A running operator job is a `deck` with `glyph` `plan` and a `now` line. When it produces drafts, those become ask cards, one at a time, send card first.
-- Ping every few seconds. Restart the child if `pong` is late. Re-sign the pinned hash.
+On an older helper, Brain keeps using bare `ask`, `deck`, `meeting`, and the flat tray, and it does not send `shelf`, `capture`, or `watch`.
 
-He will feel this on a shoot morning without a new gesture language. The three moves are on the housing. Sending, joining, and marking paid are taps. Saying a job aloud can wait if speech is not ready; typing it in the tray is the same operator.
+- On `ready`, push the three moves. The rest peek is “3 moves” or “Clear”.
+- Approve cards for the drafted email, the drafted text, and the Zelle match. `open: true`. No `always`. Zelle’s wing says “Paid?”. The amount is only in the open question.
+- The next meeting uses `startsAt` and a brief from the ledger with no revenue figures. Join carries the id.
+- A running operator job is a `deck` with glyph `plan`. Drafts it produces become ask cards, one at a time.
+- Ping on an interval. Restart the child if `pong` is late. Re-sign the pinned hash.
 
-### v0.4.0 — Hands, and more than one thing at once
+#### 1. File shelf
+
+**What he feels.** He drags a file onto the notch and it stays there. He drags it back out into any app that accepts a file drop. He can also type or say “send to Ryan” or “file under LabTested.” Brain prepares that action. He taps Allow. Until that tap, the file is only parked.
+
+**Who owns it.** The helper owns the drag session, the copy, and the chips, because it is the window under the cursor. Brain owns the shelf directory path, the ledger row, and every action that sends, moves into a business folder, or attaches the file to a deal. Brain’s gate is still `lib/trust.ts` and `lib/actions.ts`.
+
+**macOS APIs, all in the helper.**
+
+- Incoming file URLs: `NSDraggingDestination` on the tracking view (`draggingEntered`, `draggingUpdated`, `performDragOperation`). Pasteboard type `NSPasteboard.PasteboardType.fileURL`.
+- Incoming promises (browsers, Photos, a Mail attachment that is not a file yet): `NSFilePromiseReceiver`. Call `receivePromisedFiles` inside the drop handler and copy into the shelf before the drag’s security scope ends.
+- Outgoing: each chip starts an `NSDraggingSession`. The item is an `NSFilePromiseProvider` whose delegate copies the parked file to the destination URL in `filePromiseProvider(_:writePromiseTo:completionHandler:)`. Also place the file URL on the pasteboard so Finder and older apps that ignore promises still receive it. Dragging out copies. It does not remove the shelf item.
+- SwiftUI draws the chips (name, kind icon from `UTType`, a remove control). The black shape stays the `CAShapeLayer`. On `draggingEntered` the shape uses the same nine path elements with a slightly wider pad so he can see the drop will land.
+- `NSWorkspace` is not required to park a file.
+
+**Why the drop works at all.** The panel sets `ignoresMouseEvents` whenever the cursor is outside the shape, and a window that ignores mouse events never receives `draggingEntered`. The global monitor already sees `leftMouseDragged`. While the button is down and the cursor is over the notch, the panel accepts events so the destination can fire. A click with almost no movement is still a click. A movement past a few points is a drag-out, and it does not also emit `click`.
+
+**Protocol.** Cap `shelf`.
+
+Brain tells the helper where to put bytes. One directory, under Brain’s data folder, so a helper restart does not invent a second shelf:
+
+```json
+{"t":"shelfDir","path":"/Users/arnie/Library/Application Support/Brain/shelf"}
+```
+
+Brain can also restore chips after a restart. The helper trusts this list only for files inside that directory:
+
+```json
+{"t":"shelf","items":[{"id":"s1","name":"PO.pdf","path":"/Users/arnie/Library/Application Support/Brain/shelf/PO.pdf","bytes":180000}]}
+```
+
+Helper to Brain when a drop finishes:
+
+```json
+{"ev":"shelf","op":"add","id":"s1","name":"PO.pdf","path":"/Users/arnie/Library/Application Support/Brain/shelf/PO.pdf","bytes":180000}
+```
+
+Remove (the chip’s x), and a drag that left the shelf (informational; the file stays parked):
+
+```json
+{"ev":"shelf","op":"remove","id":"s1"}
+{"ev":"shelf","op":"dragged","id":"s1"}
+```
+
+An action phrase uses the capture message below with `shelf` set to the id. Brain answers with a normal ask, no `always`:
+
+```json
+{"t":"view","view":{"mode":"ask","open":true,"glyph":"shelf","ask":{"id":"act:s1","question":"File PO.pdf under LabTested?","allow":"File","deny":"Leave parked"}}}
+```
+
+“Send to Ryan” is the same shape, Allow labeled “Approve & send”, and the file is the attachment. The model may see the filename and his sentence. It does not see the file bytes, and it does not see a revenue figure that happened to be inside the PDF unless he later opens that draft in the window and asks.
+
+**Permissions and sandbox.** No new TCC prompt. Drag and drop of a file he is already holding does not need Accessibility, Full Disk Access, or a file-access grant. The helper is not sandboxed today, so a path copied during the drop stays readable. Copy during `performDragOperation`, not later. If a future Brain build sandboxes this binary, the drop’s security-scoped URL dies at the end of the drag and the shelf breaks unless the copy still happens inside that call. Keep the helper unsandboxed, same as the release notes say the host signs an unsandboxed tool. Do not strip `com.apple.quarantine` on the copy.
+
+**Effort.** L on the helper (in, promise receiver, out, chips, the ignores-mouse hole). M in Brain (directory, restore on `ready`, phrase to a pending action). This is the largest helper change in the tag, and it is still this tag because a shelf that cannot be dragged back out is just an upload button.
+
+**Edge cases.**
+
+- A file over about 2 GB is parked by path, not copied. Dragging a camera magazine into Application Support would fill the disk. The chip says “linked” and drag-out uses the original URL. If the original disappears, the chip shows a missing state and Brain is told `{"ev":"shelf","op":"missing","id":"..."}`.
+- A folder or a package (`.app`, `.fcpbundle`) is one item. Do not recurse into it.
+- Cap the shelf at 20 items. Past that, the drop is refused with a one-line “shelf is full” and nothing is copied.
+- Name collisions get a suffix (`PO 2.pdf`).
+- Option-drag does not move. v0.3 always copies, so a drop cannot eat the only copy of a file.
+- A drag-out while an approve card is open for that file still copies. The card stays until he taps.
+- Aliases: copy the resolved file if the target exists. A broken alias is refused.
+
+#### 2. Quick capture
+
+**What he feels.** He hits the shortcut, or he clicks the open island, and types or speaks. “Remind me to send Forest the one-pager Thursday.” Return files it. The island shows “Noted” and gets out of the way. Thursday’s morning moves include the promise. Forest does not get an email.
+
+**Who owns it.** Brain owns the words after they are submitted, the microphone, and the write into the ledger and to-dos (`lib/learn/commitments.ts` and the existing to-do store). The helper owns the one-line field and the decision to become key for as long as that field is open.
+
+**Why hover does not focus the field.** The hover gate opens the island after 0.3 seconds, which is also how he reaches the menu bar on purpose. Focusing a text field there would pull the key window out of Final Cut. Hover reveals the capture row. The shortcut, or a click on that row, opens the field. Push-to-talk is the shortcut held down: he can speak without the field taking keys.
+
+**The one exception to “never key.”** `IslandPanel.canBecomeKey` stays false in every mode except `capture`. While capture is open the panel may become key so the `NSTextField` (an AppKit field hosted next to the SwiftUI chips, not a SwiftUI `TextField` fighting the non-key window) can take keystrokes. Return submits. Escape, a click outside, and `leave` after the field is empty all resign key and order the previous app back. The panel is key only for that sentence.
+
+**Speech.** `SFSpeechRecognizer` with `requiresOnDeviceRecognition = true`, plus `AVAudioEngine` for the tap, runs in Brain. Brain’s `Info.plist` carries `NSMicrophoneUsageDescription` and `NSSpeechRecognitionUsageDescription`. The helper does not link Speech, does not prompt, and does not become a bundle just to hold a usage string. A bare re-signed binary is a bad place for a microphone grant. Brain streams partial text; the helper only draws it.
+
+If Brain’s existing dictation path already returns on-device text, use that and do not add a second recognizer. A cloud speech endpoint is out of this design.
+
+**Protocol.** Cap `capture`.
+
+Open the field (shortcut in Brain calls this; a click on the row makes the helper emit `capture` with `op` `open` and Brain echoes it):
+
+```json
+{"t":"view","view":{"mode":"capture","open":true,"capture":{"id":"c1","prompt":"Note, to-do, or reminder","text":"","shelf":null}}}
+```
+
+Partials from Brain while he is speaking. These must not change geometry, so the spring stays still:
+
+```json
+{"t":"captureText","id":"c1","text":"remind me to send Forest","partial":true}
+```
+
+Helper to Brain:
+
+```json
+{"ev":"capture","op":"open","id":"c1"}
+{"ev":"capture","op":"submit","id":"c1","text":"remind me to send Forest the one-pager Thursday","shelf":"s1"}
+{"ev":"capture","op":"speech","id":"c1","on":true}
+{"ev":"capture","op":"cancel","id":"c1"}
+```
+
+`shelf` is set when the sentence is about a parked file. `on: true` starts the mic; `on: false` stops it. Brain classifies the submitted sentence locally:
+
+- A reminder, note, or promise is written immediately. He just ordered that write. Due date only when he said one. The commitment quote is his sentence.
+- An outbound act (“text Forest that Thursday works”, “send this to Ryan”) becomes an ask card. The note can still be stored. The send waits.
+
+**Permissions and sandbox.** Typing needs no prompt. Speech needs the microphone and speech-recognition prompts on the Brain app, once, with copy that says the audio stays on the Mac. No sandbox change. Capture text is a short line, far under the 1 MB line cap. Do not put the sentence into an outbound draft prompt unless the ask card is a reply he is approving, and strip revenue figures with the same `hideMoney` rule as mail drafts.
+
+**Effort.** M. The field, the scoped `canBecomeKey`, and the four events are the helper. The ledger write and the “is this a send?” split are Brain. On-device speech is M if Brain has no dictation yet, and S if it does.
+
+**Edge cases.**
+
+- A hover that was only a glance never starts the mic and never becomes key.
+- Escape on an empty field closes it. Escape on a partial discards it. Nothing is written.
+- Helper dies before Return: typed text is lost. Speech text is already in Brain and is discarded unless he submitted. v0.3 does not autosave partials, so a half-heard sentence cannot become a promise.
+- “Remind me LabTested did $80k” is stored as a private note and marked so the morning drafter does not pick it up. The wing never shows the figure. The peek can say “Noted”.
+- Capture stays open if a download finishes underneath. A new ask card does not steal the field while it is first responder. The card shows when he submits or cancels.
+- The shortcut is a chord registered with Electron `globalShortcut` (Carbon hotkey, no Accessibility, no event tap). It toggles capture. It is not a hidden Allow key.
+
+#### 3. Progress for exports, downloads, and uploads
+
+**What he feels.** While Final Cut exports, the right wing grows a thin bar and the file’s name. He hovers and sees the real list if more than one thing is moving. When the file settles, the island pings once and offers Reveal. Reveal shows the file in Finder. It does not upload it, share it, or send it.
+
+**Who owns it.** The helper owns the watch, the bar, and the Reveal call, so a 10 Hz file growth does not become a 10 Hz JSON stream and a 10 Hz spring. Brain owns the folder list (his export folder, his Drive mirror) and hears start and done so the ledger can mention “the export finished” without polling the disk itself. Brain does not draw the bar.
+
+**macOS APIs.**
+
+- `FSEventStreamCreate` with `kFSEventStreamCreateFlagFileEvents`, latency around 0.3 seconds, on a background queue, coalesced onto the main thread for the model. The stream watches only the directories Brain named. It does not watch `/`.
+- `NSProgress.addSubscriber(forFileURL:withPublishingHandler:)` for a file that appeared in those directories. If the writer publishes progress for that URL, the fraction comes from there. Final Cut and Premiere usually do not publish. Safari and some Foundation copies sometimes do. Use the fraction when a publisher exists.
+- Otherwise a file-growth heuristic. Sample size on each FSEvent. Kind comes from the suffix and the running app (`NSWorkspace.shared.runningApplications`), not from a private export API.
+  - Download: `.crdownload` (Chrome, Arc), `.download` (Safari), `.part` (Firefox), or a file in `~/Downloads` whose size is still changing.
+  - Export: `.mov`, `.mp4`, `.mxf`, `.m4v` growing in the export folder he named, while Final Cut Pro, Compressor, or Adobe Premiere Pro is running.
+  - Drive upload: a growing file or a temp name inside the Drive mirror he named. There is no percent in Brain’s read-only Drive API, and this design does not add one.
+  - AirDrop in: a new file in Downloads whose quarantine xattr mentions `sharingd`, or a file `sharingd` is writing. Outgoing AirDrop has no public progress. v0.3 does not show an outgoing percent. Incoming often appears only when the copy is finished, so the UI is a done ping rather than a fake bar.
+- `NSMetadataQuery` scoped to those same directories, started once after wake and after `ready`, as a catch-up for files that finished while the helper was down. Spotlight is too slow and too incomplete to drive the live bar. It is not the ticker.
+- Done: the temp suffix is gone and the size has been still for about 3 seconds (about 5 seconds for media over a few GB), or `NSProgress` reported completed. Then the item’s state is `done`.
+- Reveal: `NSWorkspace.shared.activateFileViewerSelecting([url])` from the helper on the button tap. That activates Finder on a file he already has. It is not a send.
+
+**SwiftUI.** A mode is not required for the wing. `IslandModel` holds up to three `Transfer` values beside the view. The right wing draws a 2-point bar when there is no meeting countdown. Hover, or a click when nothing more urgent is open, expands to one row per transfer: label, kind, bytes, and either a fraction bar or an indeterminate bar. A done row has the Reveal button. The shape height for three rows stays inside the ask height the canvas already allows. Updates publish the fraction only. They do not call `apply` unless the row count changed.
+
+**Protocol.** Cap `progress`.
+
+Brain configures the watch. Empty `dirs` means Downloads only, which the helper may always watch:
+
+```json
+{"t":"watch","dirs":["/Users/arnie/Downloads","/Users/arnie/Movies/Exports","/Users/arnie/Library/CloudStorage/GoogleDrive/My Drive"]}
+```
+
+Helper to Brain, on the transitions only:
+
+```json
+{"ev":"progress","id":"p1","state":"active","kind":"export","label":"Interview_04.mov","path":"/Users/arnie/Movies/Exports/Interview_04.mov","bytes":2400000000,"total":null}
+{"ev":"progress","id":"p1","state":"done","kind":"export","label":"Interview_04.mov","path":"/Users/arnie/Movies/Exports/Interview_04.mov","bytes":8100000000}
+{"ev":"action","id":"reveal","ask":"p1","path":"/Users/arnie/Movies/Exports/Interview_04.mov"}
+```
+
+`total` is a number only when `NSProgress` or the file format actually provided one. Otherwise it is null and the bar is indeterminate. The helper never invents a percent from a guessed duration.
+
+**Permissions and sandbox.** Watching `~/Downloads` and folders he configured does not need Full Disk Access, Screen Recording, or Accessibility for an unsandboxed app. Do not watch Mail, Messages, or `~/Library/Messages`. Desktop can be in the list if he adds it; the design default is Downloads plus the export folder and the Drive mirror from Brain’s settings. App Sandbox on the helper would turn these watches into silent failures or into a Files and Folders prompt that breaks when the binary is re-signed. The helper stays unsandboxed. No new entitlement.
+
+**Effort.** M. Almost all of it is helper code plus a settings list in Brain for the export folder and the Drive mirror. No model call.
+
+**Edge cases.**
+
+- A file he is copying by hand in Finder looks like a download. That is acceptable when it is in Downloads. Outside Downloads, growth counts only if one of the named apps is running, so a Premiere auto-save does not become an “export” unless it is in the export folder.
+- Do not use `lsof` or another process’s file descriptors. On current macOS that reaches for task ports and a permission this design does not have.
+- Two exports and a Chrome download share the three rows. A fourth waits until one finishes. The wing shows the most recently updated.
+- An approve card owns the body. The 2-point bar can remain in the wing unless the meeting countdown is using that wing. The done ping waits until the card closes, then shows Reveal. His tap on Allow is never covered by “export finished.”
+- A stalled export (size still, app still running, temp suffix still there) stays `active` with the last byte count, not `done`. Done requires the final name.
+- Reveal on a missing path shows “missing” and emits `progress` state `missing`. It does not create a file.
+- Filenames can be client names. They are already on his menu bar in Finder. The bar does not read file contents, so a contract’s body never hits the pipe or a prompt.
+- Drive “upload” can sit on a finished local file for a long time while Drive syncs in a way FSEvents cannot see. When the size has settled, call it done locally and do not claim Google has it. The label is “copied” for Drive, not “uploaded,” unless a publisher reported completion.
+
+#### Priority when several of these are true
+
+The helper still has one body. v0.3.0 composes the wings so this does not wait for the v0.4.0 stack.
+
+1. Capture, while the field is first responder.
+2. An ask card (`open: true`), including shelf actions and Zelle.
+3. A meeting inside the lead time.
+4. The three moves, when he hovers a resting island or Brain set them open.
+5. Progress rows, when he hovers and nothing above is open.
+6. Shelf chips, in that same rest hover, under the moves if both exist.
+
+The right wing prefers the meeting countdown, then the progress bar, then the shelf count, then the move count. The left wing is the glyph of whatever owns the body.
+
+#### What he feels on a shoot day
+
+The three moves are on the housing when he sits down. A Final Cut export keeps its bar without covering Forest’s approve card. He drops a PO, says “file under LabTested,” and taps. He hits the shortcut and says “remind me to send Forest the one-pager Thursday,” and Thursday’s list grows that promise. When the export settles, Reveal opens Finder. Nothing in that sequence sends mail, sends a text, books, or pays.
+
+### v0.4.0 — More than one thing in the body
+
+The shelf, capture, and progress shipped in 0.3.0. This tag is the general stack, so a meeting, a Zelle card, and a finished export can share the expanded body instead of taking turns.
 
 Helper:
 
-- A stack of a few activities, with a priority, replacing the single view as the thing Brain updates. Size changes still morph. Text changes inside the same size do not.
-- `flash` for Sent, Joined, and Marked paid, then the stack returns.
-- File drop on the shape, `ev` `drop` with paths. Cap `drop`.
-- A host `peek` is already in 0.3; 0.4 adds swipe-between-items while the shape is open, emitting `focus`.
+- A stack of a few activities, with the same priority as 0.3.0, replacing the single body when Brain sends `{"t":"stack","items":[...]}`. Size changes still morph. Text and fractions inside the same size do not.
+- `flash` for Sent, Joined, Marked paid, Noted, and Export done, then the stack returns. The 0.3.0 done row remains the fallback when `flash` is absent.
+- Swipe between the three moves while the shape is open, emitting `focus`.
 
 Brain:
 
-- The global shortcut toggles the tray. The command field and the voice capture live here, on-device, and a transcript starts the operator. The approve buttons stay on screen.
-- Clipboard on demand inside that tray.
+- Clipboard on demand inside the tray.
 - Screenshot into uploads, then an ask card that names the deal, before a model sees the file.
 - Now Playing as a low-priority stack item. A failure to read the private API removes the item and leaves the morning alone.
 - Activate-an-app as an operator step with no UI scripting.
 
-He will feel this when two things are true at once (the call and the Zelle card) and when he drops a PO on the housing.
+He will feel this when the buyer call and the Zelle card are both open, and the export bar is still there.
 
 ### v0.5.0 — The room
 
 Helper:
 
 - `mood` on the rest state, and the flash celebration wired to a confirmed payment.
-- Room for a one-line streak in `peek` when the badge is zero.
+- Room for a one-line streak in `peek` when the badge is zero and the shelf is empty.
 - A visualizer row that draws amplitudes Brain sends. No audio capture in this process.
-- The tiny game, only on hover, only when the stack is empty, killed by any ask or meeting.
+- The tiny game, only on hover, only when the stack is empty and no transfer is active, killed by any ask, meeting, capture, or progress item.
 
 Brain:
 
@@ -486,7 +684,7 @@ Brain:
 - Streak and mood chosen from the ledger with rules, not a model call, so a quiet morning does not spend a local-model load.
 - Music amplitudes if Now Playing from 0.4.0 has stayed up across one macOS update. If it has not, skip the bars.
 
-He will feel this when the island is idle: a small sign of life, a cleared-invoice tick, the marine layer. The first time a real card arrives, all of it gets out of the way.
+He will feel this when the island is idle: a small sign of life, a cleared-invoice tick, the marine layer. The first time a real card, a capture, or an export arrives, all of it gets out of the way.
 
 ### Cutting a release
 
@@ -506,4 +704,10 @@ Same as 0.1.0 and 0.2.0.
 2. **Let him send, join, and mark a Zelle paid with a tap**, on the same Approve path the window already uses. No Always, and a spoken “send it” does not send.
 3. **Count the next meeting down and put the brief next to Join.** The brief is the deal and the promise, without a revenue number.
 4. **Keep dollars off the wings.** The open Zelle card can show the one invoice amount he is confirming. That amount never goes into an outbound prompt, and the compact pill stays a word.
-5. **Treat the helper as a display Brain drives**, re-signed and pinned by hash. Brain keeps the mail, the money, the mic, and the screen recording. The helper’s job is to morph, hover, and report the tap.
+5. **Treat the helper as a display Brain drives**, re-signed and pinned by hash. Brain keeps the mail, the money, the mic, and the screen recording. The helper morphs, hovers, reports the tap, parks files he drops, and watches the folders Brain names.
+
+## Revised v0.3.0
+
+The morning stays: three moves, a tap to send or join or mark a Zelle paid, a meeting countdown with the brief, and no dollars on the wings.
+
+Three things he picked sit in the same release. He can park a file on the notch and drag it back out, and a sentence like “send to Ryan” only prepares a card. He can hit a shortcut and type or speak a reminder, and it goes on the list without sending the email. Exports, downloads, Drive copies, and incoming AirDrop show a live bar, then a done ping that reveals the file in Finder. Final Cut will not give a true percent; the bar shows bytes moving, and a real fraction only when macOS actually publishes one. Nothing in the release sends, books, or pays without a tap.
