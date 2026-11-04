@@ -5,18 +5,23 @@ another process over JSON lines on stdin/stdout. It is meant to be embedded in a
 app) that wants a native-feeling notch surface without writing AppKit itself.
 
 - A borderless, non-activating `NSPanel` at `mainMenu + 3`, on every Space and over full-screen apps, stationary in
-  Mission Control, out of the window cycle. It never becomes key, so the user's app keeps focus.
+  Mission Control, out of the window cycle. It stays out of the key window, except while the capture field is open,
+  and then it gives focus back.
 - Anchored to the real notch (`safeAreaInsets`, `auxiliaryTopLeftArea` / `auxiliaryTopRightArea`); re-anchored on
   display, Space and wake changes. No notch: a slim pill at the top centre.
 - One black `CAShapeLayer` that morphs between states with `CASpringAnimation` at the display's refresh rate.
   Content is SwiftUI, masked by the same animated shape.
 - Hover: rest about 0.3 s on the notch to open; a fast fly-by never opens it. Clicks outside the shape pass through.
 - States: compact pill (glyph + elapsed time), two-line activity view, Allow / Deny / Always, upcoming meeting with
-  Join, and a flat "tray" edge for a host panel that opens below.
-- v0.2.0: `{"t":"tray","open":true,"w":…,"h":…}` makes the black shape the host's tray itself: one shape springs from
-  the notch to w × (notch + h) with rounded bottom corners and concave shoulders, so the host can draw only its
-  content (transparent) on top and fade it in once the shape is mostly open. Hovering the resting notch peeks
-  ("Nothing running"). `ready` reports `caps` and `version`.
+  Join, morning moves, a one-line capture field, a file shelf, transfer progress, and a tray edge for a host panel.
+- v0.2.0: `{"t":"tray","open":true,"w":…,"h":…}` makes the black shape the host's tray itself. Hovering a resting
+  notch peeks. `ready` reports `caps` and `version`.
+- v0.3.0: three morning moves with a count, a meeting countdown (`startsAt`) whose Join action carries the meeting id,
+  a file shelf (drag in, drag a copy back out), quick capture, and live progress for exports, downloads, Drive copies,
+  and incoming AirDrop with Reveal in Finder. A repeated view with the same shape does not restart the spring.
+  `ready` and `screen` include the panel frame. An opening spring emits `settled`. Currency amounts are stripped from
+  the wings, the peek, move rows, and the meeting brief. The open approve question is left as the host wrote it.
+  See `BRAIN.md` for what the host has to wire.
 
 ## Protocol
 
@@ -24,8 +29,14 @@ Host → helper, one JSON object per line:
 
 ```json
 {"t":"view","view":{"mode":"deck","glyph":"read","last":"Read data.csv","now":"Writing the summary","startedAt":1730550000000}}
-{"t":"view","view":{"mode":"ask","open":true,"ask":{"id":"42","question":"Move 3 files to the Trash?","allow":"Move to Trash","deny":"Cancel","always":"Always"}}}
-{"t":"view","view":{"mode":"meeting","meeting":{"title":"Design review","when":"Starts in 4 min","join":true}}}
+{"t":"view","view":{"mode":"ask","open":true,"ask":{"id":"42","question":"Send the one-pager to Forest?","allow":"Send","deny":"Not now","preview":"Here is the one-pager."}}}
+{"t":"view","view":{"mode":"meeting","open":true,"meeting":{"id":"cal:1","title":"Buyer call","when":"Soon","startsAt":1730550000000,"brief":"You owe the one-pager.","join":true}}}
+{"t":"view","view":{"mode":"moves","open":true,"badge":3,"peek":"3 moves","moves":[{"id":"m1","title":"Send the one-pager","sub":"LabTested","kind":"email"}]}}
+{"t":"view","view":{"mode":"capture","open":true,"capture":{"id":"c1","prompt":"Note, to-do, or reminder","text":"","shelf":null}}}
+{"t":"captureText","id":"c1","text":"remind me to send Forest","partial":true}
+{"t":"shelfDir","path":"/Users/arnie/Library/Application Support/Brain/shelf"}
+{"t":"shelf","items":[{"id":"s1","name":"PO.pdf","path":"/Users/arnie/Library/Application Support/Brain/shelf/PO.pdf","bytes":180000}]}
+{"t":"watch","dirs":["/Users/arnie/Downloads","/Users/arnie/Movies/Exports"]}
 {"t":"view","view":{"mode":"rest"}}
 {"t":"tray","open":true}
 {"t":"tray","open":true,"w":520,"h":236}
@@ -34,8 +45,29 @@ Host → helper, one JSON object per line:
 {"t":"quit"}
 ```
 
-Helper → host: `ready`, `screen`, `hover`, `leave`, `click`, `action` (`allow` / `deny` / `always` / `join`),
-`pong`. Closing stdin makes the helper exit. Full field list: `Sources/IslandCore/Protocol.swift`.
+Helper → host:
+
+| Event | When |
+| --- | --- |
+| `ready` | Once. `v` is 1. `version` is `0.3.0`. `caps` lists what this build can do. `frame`, `display`, `scale`, `displayFrame`, and `origin` (`appkit-bottom-left`) locate the panel. |
+| `screen` | The panel moved. Same frame fields as `ready`. |
+| `settled` | An opening spring finished. `w` and `h` are the island size in points. Fade a host tray in on this, not on a timer. |
+| `hover` / `leave` / `click` | The cursor rested, left, or clicked the body (not a button). |
+| `action` | `allow`, `deny`, `always`, `join`, `open` (a morning move), `reveal`. `ask` is the card, meeting, move, or transfer id. |
+| `shelf` | `op` is `add`, `remove`, `dragged`, or `missing`. A drag out copies. The chip stays. |
+| `capture` | `op` is `open`, `submit`, `speech`, or `cancel`. `speech` carries `on`. `submit` carries `text` and, for a parked file, `shelf`. |
+| `progress` | `state` is `active`, `done`, or `missing`. `kind` is `export`, `download`, `drive`, or `airdrop`. `total` is JSON null when the size is unknown. The bar ticks locally. These lines are the transitions. |
+| `pong` | Answer to `ping`. |
+
+`ready.caps` for 0.3.0: `traySize`, `peek`, `peekText`, `countdown`, `screenFrame`, `settled`, `moves`, `shelf`, `capture`, `progress`.
+
+An unknown `mode` is drawn as a deck that says it cannot show that mode. It does not pretend nothing is running.
+
+Closing stdin makes the helper exit. Field list: `Sources/IslandCore/Protocol.swift`. What Brain still has to do: `BRAIN.md`.
+
+A sized tray draws the black body, and clicks in that body pass through this window so the host window stacked underneath can take them. Place that window with `frame` (AppKit points, bottom-left origin) and wait for `settled`.
+
+The `keys` caption on an ask card is registered as a system hotkey only while that card is open, then released. Allow is still the button. A send, a booking, and a payment are the host's tap. This process does not perform them.
 
 ## Build
 

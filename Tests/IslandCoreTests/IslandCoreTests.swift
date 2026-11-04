@@ -187,6 +187,6 @@ final class HoverTests: XCTestCase {
         XCTAssertEqual(p.count, 9)
         if case let .move(x, y) = p[0] { XCTAssertEqual(x, Layout.canvasW / 2 - Layout.trayW / 2 - Layout.shoulder); XCTAssertEqual(y, Layout.canvasH) } else { XCTFail("move first") }
         XCTAssertTrue(capabilities.contains("traySize"))
-        XCTAssertEqual(helperVersion, "0.2.0")
+        XCTAssertEqual(helperVersion, "0.3.0")
     }
 }
