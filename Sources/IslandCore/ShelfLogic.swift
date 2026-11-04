@@ -62,3 +62,26 @@ public func standardizePath(_ path: String) -> String {
 public func shelfItemsInside(_ items: [ShelfItem], directory: String) -> [ShelfItem] {
     items.filter { pathIsInside($0.path, directory: directory) }
 }
+
+/// The shelf folder has to be a dedicated folder. The disk root, /Users, the home folder, and any folder directly
+/// in the home folder (Desktop, Documents, Downloads, Library) are refused, so a bad `shelfDir` can never make the
+/// chip's × delete one of his own files. Mail and Messages are refused too.
+public func allowedShelfDir(_ path: String, home: String) -> Bool {
+    guard path.hasPrefix("/") else { return false }
+    let p = standardizePath(path)
+    let h = standardizePath(home)
+    let parts = p.split(separator: "/")
+    if parts.count < 3 { return false }
+    if !h.isEmpty {
+        if p == h { return false }
+        let parent = URL(fileURLWithPath: p).deletingLastPathComponent().path
+        if standardizePath(parent) == h { return false }
+    }
+    if !allowedWatchDir(p) { return false }
+    return true
+}
+
+/// Names already used in the shelf folder: chips, copies in flight, and files on disk. A new copy never replaces one.
+public func takenShelfNames(chips: [String], pending: Set<String>, onDisk: [String]) -> Set<String> {
+    Set(chips).union(pending).union(onDisk)
+}

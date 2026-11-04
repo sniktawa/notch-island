@@ -93,6 +93,22 @@ final class ShelfLogicTests: XCTestCase {
         XCTAssertEqual(decidePark(isDirectory: false, isPackage: false, bytes: 10, count: 0, aliasBroken: true), .refuse("broken alias"))
     }
 
+    func testShelfDirGuard() {
+        let home = "/Users/arnie"
+        XCTAssertTrue(allowedShelfDir("/Users/arnie/Library/Application Support/Brain/shelf", home: home))
+        XCTAssertFalse(allowedShelfDir("/", home: home))
+        XCTAssertFalse(allowedShelfDir("/Users", home: home))
+        XCTAssertFalse(allowedShelfDir("/Users/arnie", home: home))
+        XCTAssertFalse(allowedShelfDir("/Users/arnie/Desktop", home: home))
+        XCTAssertFalse(allowedShelfDir("/Users/arnie/Library", home: home))
+        XCTAssertFalse(allowedShelfDir("/Users/arnie/Library/Application Support/Brain/../../..", home: home))
+        XCTAssertFalse(allowedShelfDir("/Users/arnie/Library/Mail/x", home: home))
+        XCTAssertFalse(allowedShelfDir("relative/shelf/dir", home: home))
+        let taken = takenShelfNames(chips: ["a.pdf"], pending: ["b.pdf"], onDisk: ["c.pdf"])
+        XCTAssertEqual(uniqueShelfName("c.pdf", taken: taken), "c 2.pdf")
+        XCTAssertEqual(uniqueShelfName("b.pdf", taken: taken), "b 2.pdf")
+    }
+
     func testNamesAndPaths() {
         XCTAssertEqual(uniqueShelfName("PO.pdf", taken: []), "PO.pdf")
         XCTAssertEqual(uniqueShelfName("PO.pdf", taken: ["PO.pdf"]), "PO 2.pdf")

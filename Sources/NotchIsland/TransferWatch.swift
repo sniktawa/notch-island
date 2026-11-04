@@ -41,7 +41,7 @@ final class TransferWatch {
         query = nil
         if let queryObserver { NotificationCenter.default.removeObserver(queryObserver) }
         queryObserver = nil
-        for (_, token) in subscribers { NSProgress.removeSubscriber(token) }
+        for (_, token) in subscribers { Progress.removeSubscriber(token) }
         subscribers.removeAll()
         observations.removeAll()
     }
@@ -80,7 +80,7 @@ final class TransferWatch {
             DispatchQueue.main.async { watch.ingest(copy, quiet: false) }
         }
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
-        let flags: FSEventStreamCreateFlags = [.fileEvents, .useCFTypes]
+        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes)
         guard let stream = FSEventStreamCreate(nil, callback, &context, dirs as CFArray, FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.3, flags) else { return }
         self.stream = stream
         FSEventStreamSetDispatchQueue(stream, DispatchQueue.global(qos: .utility))
@@ -113,8 +113,29 @@ final class TransferWatch {
     }
 
     private func tick() {
+        prune()
         let paths = Array(items.keys)
         ingest(paths, quiet: warming)
+    }
+
+    /// Finished and missing rows leave after ten minutes, and at most 40 rows are kept, so a busy Drive folder does
+    /// not make every one-second tick stat a growing list for the rest of the day.
+    private func prune() {
+        let now = Date().timeIntervalSince1970
+        var drop = items.filter { $0.value.state != "active" && now - $0.value.updatedAt > 600 }.map { $0.key }
+        let keep = 40
+        if items.count - drop.count > keep {
+            let rest = items.filter { !drop.contains($0.key) }.sorted { a, b in
+                if (a.value.state == "active") != (b.value.state == "active") { return a.value.state != "active" }
+                return a.value.updatedAt < b.value.updatedAt
+            }
+            drop += rest.prefix(items.count - drop.count - keep).map { $0.key }
+        }
+        for key in drop {
+            items.removeValue(forKey: key)
+            stillSince.removeValue(forKey: key)
+            dropProgress(key)
+        }
     }
 
     private func ingest(_ paths: [String], quiet: Bool) {
@@ -192,15 +213,16 @@ final class TransferWatch {
     private func subscribe(_ path: String) {
         guard subscribers[path] == nil else { return }
         let url = URL(fileURLWithPath: path)
-        let token = NSProgress.addSubscriber(forFileURL: url) { [weak self] progress in
+        let token = Progress.addSubscriber(forFileURL: url) { [weak self] progress in
             DispatchQueue.main.async {
                 self?.observe(progress, path: path)
             }
+            return nil
         }
         subscribers[path] = token
     }
 
-    private func observe(_ progress: NSProgress, path: String) {
+    private func observe(_ progress: Progress, path: String) {
         observations[path] = progress.observe(\.fractionCompleted, options: [.initial, .new]) { [weak self] prog, _ in
             DispatchQueue.main.async {
                 self?.applyFraction(path: path, fraction: prog.fractionCompleted, finished: prog.isFinished, total: prog.totalUnitCount, completed: prog.completedUnitCount)
@@ -228,7 +250,7 @@ final class TransferWatch {
 
     private func dropProgress(_ path: String) {
         observations[path] = nil
-        if let token = subscribers.removeValue(forKey: path) { NSProgress.removeSubscriber(token) }
+        if let token = subscribers.removeValue(forKey: path) { Progress.removeSubscriber(token) }
     }
 
     private func publish(_ event: TransferEvent?) {

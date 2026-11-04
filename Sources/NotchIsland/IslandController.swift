@@ -64,6 +64,11 @@ final class IslandController {
     let shelf = ShelfStore()
     let watch = TransferWatch()
     let hotkeys = AskHotKeys()
+    let promiseQueue: OperationQueue = {
+        let q = OperationQueue()
+        q.qualityOfService = .userInitiated
+        return q
+    }()
     var panel: IslandPanel!
     var shapeView: ShapeView!
     var dragHost: DragHostView!
@@ -164,7 +169,7 @@ final class IslandController {
         model.onRemoveShelf = { [weak self] id in self?.removeShelf(id) }
         model.onDragShelf = { [weak self] id in
             guard let self, let item = self.shelf.item(id) else { return }
-            var fields: [String: Any] = ["op": "dragged", "id": id, "name": item.name, "path": item.path, "bytes": item.bytes]
+            let fields: [String: Any] = ["op": "dragged", "id": id, "name": item.name, "path": item.path, "bytes": item.bytes]
             Emit.send("shelf", fields)
         }
         model.onShelfClick = { [weak self] id in self?.openCapture(shelf: id) }
@@ -226,9 +231,13 @@ final class IslandController {
         for name in [NSWorkspace.activeSpaceDidChangeNotification, NSWorkspace.didWakeNotification, NSWorkspace.screensDidWakeNotification] {
             wsObservers.append(wc.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
                 self?.anchor()
-                self?.watch.setDirs(self?.watch.dirs ?? [])
             })
         }
+        // FSEvents can miss events across sleep: restart the watcher on wake only (not on every Space switch)
+        wsObservers.append(wc.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            self.watch.setDirs(self.watch.dirs)
+        })
     }
 
     // MARK: shape
@@ -349,7 +358,7 @@ final class IslandController {
     func openCapture(shelf: String?) {
         let id = model.view.capture?.id ?? ("c" + String(UUID().uuidString.prefix(8)).lowercased())
         let prompt = shelf == nil ? "Note, to-do, or reminder" : "Send, file, or leave parked"
-        var view = IslandView(mode: "capture", glyph: "capture", open: true, badge: model.view.badge, peek: model.view.peek, capture: CaptureInfo(id: id, prompt: prompt, text: model.captureDraft, shelf: shelf))
+        var view = IslandView(mode: "capture", glyph: "capture", open: true, peek: model.view.peek, badge: model.view.badge, capture: CaptureInfo(id: id, prompt: prompt, text: model.captureDraft, shelf: shelf))
         if model.view.mode == "moves" { view.moves = model.view.moves }
         applyView(view, focus: true)
         var fields: [String: Any] = ["op": "open", "id": id]
@@ -375,9 +384,9 @@ final class IslandController {
         panel.resignKey()
         if let app = previousApp, app.processIdentifier != ProcessInfo.processInfo.processIdentifier {
             if #available(macOS 14.0, *) {
-                app.activate(from: NSApp, options: [.activateAllWindows])
+                _ = app.activate()
             } else {
-                app.activate(options: [.activateIgnoringOtherApps])
+                _ = app.activate(options: [])
             }
         }
         previousApp = nil
@@ -420,9 +429,9 @@ final class IslandController {
     }
 
     func toggleSpeech(_ on: Bool) {
+        if model.view.mode != "capture" { openCapture(shelf: nil) }
         model.speechOn = on
         let id = model.view.capture?.id ?? "c"
-        if model.view.mode != "capture" { openCapture(shelf: nil) }
         Emit.send("capture", ["op": "speech", "id": id, "on": on])
     }
 
@@ -430,13 +439,15 @@ final class IslandController {
 
     func receiveFiles(_ urls: [URL]) {
         setDropHover(false)
-        let result = shelf.accept(urls: urls)
-        model.shelf = shelf.items
-        model.shelfMessage = result.message
-        for item in result.added { emitShelf("add", item) }
-        relayout(animated: true)
-        if let first = result.added.first { openCapture(shelf: first.id) }
-        clearShelfMessageLater()
+        shelf.accept(urls: urls) { [weak self] result in
+            guard let self else { return }
+            self.model.shelf = self.shelf.items
+            self.model.shelfMessage = result.message
+            for item in result.added { self.emitShelf("add", item) }
+            self.relayout(animated: true)
+            if let first = result.added.first { self.openCapture(shelf: first.id) }
+            self.clearShelfMessageLater()
+        }
     }
 
     func receivePromises(_ receivers: [NSFilePromiseReceiver]) {
@@ -450,15 +461,30 @@ final class IslandController {
             return
         }
         for receiver in receivers {
-            receiver.receivePromisedFiles(atDestination: dir, options: [:], operationQueue: .main) { [weak self] url, error in
-                guard let self, error == nil else { return }
-                if let item = self.shelf.adopt(copied: url) {
-                    self.model.shelf = self.shelf.items
-                    self.emitShelf("add", item)
-                    self.relayout(animated: true)
-                    self.openCapture(shelf: item.id)
-                } else {
-                    self.model.shelfMessage = "shelf is full"
+            // each promise lands in its own hidden folder first, so it can never overwrite a parked file
+            let incoming = dir.appendingPathComponent(".incoming-" + UUID().uuidString, isDirectory: true)
+            guard (try? FileManager.default.createDirectory(at: incoming, withIntermediateDirectories: true)) != nil else { continue }
+            receiver.receivePromisedFiles(atDestination: incoming, options: [:], operationQueue: promiseQueue) { [weak self] url, error in
+                DispatchQueue.main.async {
+                    defer {
+                        if ((try? FileManager.default.contentsOfDirectory(atPath: incoming.path)) ?? []).isEmpty {
+                            try? FileManager.default.removeItem(at: incoming)
+                        }
+                    }
+                    guard let self else { return }
+                    if error != nil {
+                        try? FileManager.default.removeItem(at: url)
+                        return
+                    }
+                    if let item = self.shelf.adopt(copied: url) {
+                        self.model.shelf = self.shelf.items
+                        self.emitShelf("add", item)
+                        self.relayout(animated: true)
+                        self.openCapture(shelf: item.id)
+                    } else {
+                        self.model.shelfMessage = "shelf is full"
+                        self.clearShelfMessageLater()
+                    }
                 }
             }
         }
@@ -640,8 +666,11 @@ final class IslandController {
             case .ping: Emit.send("pong")
             case .quit: NSApp.terminate(nil)
             case let .shelfDir(path):
-                shelf.setDirectory(path)
-                watch.shelfDirectory = path
+                if shelf.setDirectory(path) {
+                    watch.shelfDirectory = shelf.directory
+                } else {
+                    Emit.send("log", ["msg": "shelfDir refused (not a dedicated folder)"])
+                }
                 model.shelf = shelf.items
             case let .shelf(items):
                 shelf.restore(items)

@@ -6,23 +6,31 @@ import UniformTypeIdentifiers
 final class ShelfStore {
     private(set) var directory: String?
     private(set) var items: [ShelfItem] = []
+    /// names reserved by copies still being written (off the main thread)
+    private var pendingNames: Set<String> = []
+    private let copyQueue = DispatchQueue(label: "notch.shelf.copy", qos: .userInitiated)
 
     var directoryURL: URL? {
         guard let directory else { return nil }
         return URL(fileURLWithPath: directory, isDirectory: true)
     }
 
-    func setDirectory(_ path: String) {
-        directory = path
-        try? FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+    /// False when the folder is not a dedicated one (the home folder, Desktop, the disk root…). The old folder stays.
+    @discardableResult
+    func setDirectory(_ path: String) -> Bool {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        guard allowedShelfDir(path, home: home) else { return false }
+        directory = standardizePath(path)
+        try? FileManager.default.createDirectory(atPath: directory!, withIntermediateDirectories: true)
+        return true
     }
 
     /// Brain's restore list. Paths outside the shelf directory are ignored.
     func restore(_ incoming: [ShelfItem]) {
         guard let directory else { items = []; return }
-        items = shelfItemsInside(incoming, directory: directory).filter {
+        items = Array(shelfItemsInside(incoming, directory: directory).filter {
             FileManager.default.fileExists(atPath: $0.path)
-        }
+        }.prefix(shelfCap))
     }
 
     struct AcceptResult {
@@ -30,81 +38,113 @@ final class ShelfStore {
         var message: String?
     }
 
-    func accept(urls: [URL]) -> AcceptResult {
-        guard directory != nil else { return AcceptResult(added: [], message: "No shelf folder yet") }
-        var added: [ShelfItem] = []
+    private func taken() -> Set<String> {
+        let onDisk = directory.flatMap { try? FileManager.default.contentsOfDirectory(atPath: $0) } ?? []
+        return takenShelfNames(chips: items.map(\.name), pending: pendingNames, onDisk: onDisk)
+    }
+
+    /// Links are added at once. Copies are written on a background queue (a 2 GB file must not freeze the notch),
+    /// always to a fresh name, so nothing already in the shelf folder is replaced. `completion` runs on main.
+    func accept(urls: [URL], completion: @escaping (AcceptResult) -> Void) {
+        guard let directory else {
+            completion(AcceptResult(added: [], message: "No shelf folder yet"))
+            return
+        }
         var message: String?
+        var ready: [ShelfItem] = []
+        var copies: [(source: URL, item: ShelfItem)] = []
+        var reserved = taken()
         for url in urls {
-            if items.count >= shelfCap {
+            let count = items.count + pendingNames.count + ready.count
+            if count >= shelfCap {
                 message = "shelf is full"
                 break
             }
-            guard let item = park(url) else { continue }
-            if case .refuse(let why) = item { message = why; continue }
-            if case .item(let shelf) = item {
-                items.append(shelf)
-                added.append(shelf)
+            let resolved = resolve(url)
+            guard !resolved.broken, let source = resolved.url else {
+                message = "broken alias"
+                continue
+            }
+            let values = try? source.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey, .fileSizeKey])
+            let isDir = values?.isDirectory ?? false
+            let isPackage = values?.isPackage ?? false
+            let bytes = Double(values?.fileSize ?? 0)
+            switch decidePark(isDirectory: isDir, isPackage: isPackage, bytes: bytes, count: count) {
+            case .refuse(let why):
+                message = why
+            case .link:
+                ready.append(ShelfItem(id: freshID(), name: source.lastPathComponent, path: source.path, bytes: bytes, linked: true))
+            case .copy:
+                let name = uniqueShelfName(source.lastPathComponent, taken: reserved)
+                reserved.insert(name)
+                pendingNames.insert(name)
+                let dest = URL(fileURLWithPath: directory).appendingPathComponent(name)
+                copies.append((source, ShelfItem(id: freshID(), name: name, path: dest.path, bytes: bytes, linked: false)))
             }
         }
-        return AcceptResult(added: added, message: message)
-    }
-
-    private enum Parked {
-        case item(ShelfItem)
-        case refuse(String)
-    }
-
-    private func park(_ url: URL) -> Parked? {
-        guard let directory else { return nil }
-        let resolved = resolve(url)
-        if resolved.broken { return .refuse("broken alias") }
-        guard let source = resolved.url else { return .refuse("broken alias") }
-        let values = try? source.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey, .fileSizeKey])
-        let isDir = values?.isDirectory ?? false
-        let isPackage = values?.isPackage ?? false
-        let bytes = Double(values?.fileSize ?? 0)
-        switch decidePark(isDirectory: isDir, isPackage: isPackage, bytes: bytes, count: items.count) {
-        case .refuse(let why):
-            return .refuse(why)
-        case .link:
-            let name = source.lastPathComponent
-            return .item(ShelfItem(id: freshID(), name: name, path: source.path, bytes: bytes, linked: true))
-        case .copy:
-            let taken = Set(items.map(\.name))
-            let name = uniqueShelfName(source.lastPathComponent, taken: taken)
-            let dest = URL(fileURLWithPath: directory).appendingPathComponent(name)
-            do {
-                if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
-                try FileManager.default.copyItem(at: source, to: dest)
-                let size = (try? dest.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Double.init) ?? bytes
-                return .item(ShelfItem(id: freshID(), name: name, path: dest.path, bytes: size, linked: false))
-            } catch {
-                return .refuse("couldn't park \(source.lastPathComponent)")
+        items.append(contentsOf: ready)
+        if copies.isEmpty {
+            completion(AcceptResult(added: ready, message: message))
+            return
+        }
+        let jobs = copies
+        let linked = ready
+        let note = message
+        copyQueue.async { [weak self] in
+            var results: [(item: ShelfItem, ok: Bool)] = []
+            for job in jobs {
+                let dest = URL(fileURLWithPath: job.item.path)
+                do {
+                    // copyItem refuses an existing destination: an older file is never replaced
+                    try FileManager.default.copyItem(at: job.source, to: dest)
+                    var item = job.item
+                    if let size = try? dest.resourceValues(forKeys: [.fileSizeKey]).fileSize { item.bytes = Double(size) }
+                    results.append((item, true))
+                } catch {
+                    results.append((job.item, false))
+                }
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                var added = linked
+                var msg = note
+                for r in results {
+                    self.pendingNames.remove(r.item.name)
+                    if r.ok {
+                        self.items.append(r.item)
+                        added.append(r.item)
+                    } else {
+                        msg = "couldn't park \(r.item.name)"
+                    }
+                }
+                completion(AcceptResult(added: added, message: msg))
             }
         }
     }
 
-    /// A file the promise receiver already wrote into the shelf directory.
+    /// A promised file was written into a private `.incoming-…` folder inside the shelf directory. Move it to a fresh
+    /// name in the shelf directory. Nothing that was already there is replaced.
     func adopt(copied url: URL) -> ShelfItem? {
         guard let directory, pathIsInside(url.path, directory: directory) else { return nil }
-        if items.count >= shelfCap {
+        if items.count + pendingNames.count >= shelfCap {
             try? FileManager.default.removeItem(at: url)
             return nil
         }
-        let taken = Set(items.map(\.name))
-        var finalURL = url
-        if taken.contains(url.lastPathComponent) {
-            let name = uniqueShelfName(url.lastPathComponent, taken: taken)
-            let dest = URL(fileURLWithPath: directory).appendingPathComponent(name)
-            try? FileManager.default.moveItem(at: url, to: dest)
-            finalURL = dest
+        let name = uniqueShelfName(url.lastPathComponent, taken: taken())
+        let dest = URL(fileURLWithPath: directory).appendingPathComponent(name)
+        do {
+            try FileManager.default.moveItem(at: url, to: dest)
+        } catch {
+            try? FileManager.default.removeItem(at: url)
+            return nil
         }
-        let size = Double((try? finalURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
-        let item = ShelfItem(id: freshID(), name: finalURL.lastPathComponent, path: finalURL.path, bytes: size, linked: false)
+        let size = Double((try? dest.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        let item = ShelfItem(id: freshID(), name: name, path: dest.path, bytes: size, linked: false)
         items.append(item)
         return item
     }
 
+    /// Deleting a chip deletes only the copy this shelf made. A linked chip (his original file) is never deleted.
     func remove(id: String) {
         guard let idx = items.firstIndex(where: { $0.id == id }) else { return }
         let item = items.remove(at: idx)
@@ -265,17 +305,31 @@ final class ShelfPromise: NSObject, NSFilePromiseProviderDelegate, NSDraggingSou
         item.name
     }
 
+    /// Never deletes what is already at the drop target: a name clash gets "name 2.ext" next to it.
     func filePromiseProvider(_ filePromiseProvider: NSFilePromiseProvider, writePromiseTo url: URL, completionHandler: @escaping (Error?) -> Void) {
         do {
+            var target = url
             if FileManager.default.fileExists(atPath: url.path) {
-                try FileManager.default.removeItem(at: url)
+                let parent = url.deletingLastPathComponent()
+                let names = Set((try? FileManager.default.contentsOfDirectory(atPath: parent.path)) ?? [])
+                target = parent.appendingPathComponent(uniqueShelfName(url.lastPathComponent, taken: names))
             }
-            try FileManager.default.copyItem(at: URL(fileURLWithPath: item.path), to: url)
+            try FileManager.default.copyItem(at: URL(fileURLWithPath: item.path), to: target)
             completionHandler(nil)
         } catch {
             completionHandler(error)
         }
     }
+
+    /// Copies run off the main thread so a big file does not freeze the notch.
+    func operationQueue(for filePromiseProvider: NSFilePromiseProvider) -> OperationQueue { ShelfPromise.queue }
+
+    static let queue: OperationQueue = {
+        let q = OperationQueue()
+        q.qualityOfService = .userInitiated
+        q.maxConcurrentOperationCount = 1
+        return q
+    }()
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
         .copy
