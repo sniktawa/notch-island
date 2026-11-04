@@ -3,7 +3,7 @@ import XCTest
 
 final class V03ProtocolTests: XCTestCase {
     func testVersionAndCaps() {
-        XCTAssertEqual(helperVersion, "0.3.1")
+        XCTAssertEqual(helperVersion, "0.3.2")
         XCTAssertEqual(protocolVersion, 1)
         for cap in ["traySize", "peek", "peekText", "countdown", "screenFrame", "settled", "moves", "shelf", "capture", "progress"] {
             XCTAssertTrue(capabilities.contains(cap), cap)
@@ -72,14 +72,15 @@ final class V03ProtocolTests: XCTestCase {
         XCTAssertTrue(json.contains(#""ev":"screen""#))
     }
 
-    func testBadgeGrowsTheRestingNotch() {
+    // v0.3.2: a badge no longer widens the resting notch; only a live transfer does
+    func testBadgeDoesNotGrowTheRestingNotch() {
         let notch = NotchMetrics(width: 185, height: 32, hasNotch: true)
         let bare = islandSize(.rest, expanded: false, tray: false, notch: notch)
         XCTAssertEqual(bare.w, 185)
         let counted = islandSize(IslandView(mode: "rest", badge: 3), expanded: false, tray: false, notch: notch)
-        XCTAssertEqual(counted.w, 185 + 2 * Layout.wing)
-        let wing = islandSize(.rest, expanded: false, tray: false, notch: notch, forceWing: true)
-        XCTAssertEqual(wing.w, counted.w)
+        XCTAssertEqual(counted, bare)
+        let wing = islandSize(.rest, expanded: false, tray: false, notch: notch, transferLive: true)
+        XCTAssertEqual(wing.w, 185 + 2 * Layout.wing)
     }
 }
 

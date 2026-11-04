@@ -38,8 +38,9 @@ public struct IslandSize: Equatable {
 }
 
 public enum Layout {
-    /// each compact wing beside the notch (glyph left, clock right)
-    public static let wing = 64.0
+    /// each compact wing beside the notch (glyph left, clock right). v0.3.2: narrower (was 64); wings only show for
+    /// live things, and they cover menu-bar items while they do
+    public static let wing = 56.0
     public static let deckW = 380.0
     public static let askW = 420.0
     public static let meetW = 360.0
@@ -48,14 +49,16 @@ public enum Layout {
     public static let shoulder = 12.0
     /// the helper's window: wide and tall enough for the biggest island (the host's tray) plus spring overshoot
     public static let canvasW = 580.0
-    public static let canvasH = 480.0
+    /// v0.3.2: taller (was 480) so the shelf band fits under the tallest tray. Transparent and click-through.
+    public static let canvasH = 580.0
     /// v0.2.0: the peek under a resting cursor when nothing is running ("Nothing running")
     public static let peekExtra = 24.0
     /// v0.2.0: bottom corner radius of the open tray
     public static let trayR = 24.0
     /// v0.2.0: the tallest tray the host may ask for (below the notch); notch + tray stays 40 pt inside the canvas
     /// for the open spring's overshoot, even under a tall (38 pt) notch
-    public static let trayMaxH = canvasH - 80
+    /// v0.3.2: fixed at 400 (Brain's HELPER_TRAY_MAX_H); no longer derived from the taller canvas
+    public static let trayMaxH = 400.0
     public static let deckExtra = 54.0
     public static let askExtra = 112.0
     public static let meetExtra = 108.0
@@ -85,31 +88,38 @@ public enum RestBody {
     public static let maxTransfers = 3
 }
 
-/// Peek line, an optional message line, up to three transfer rows, one row of shelf thumbnails, the Note button.
+/// v0.3.2: the shelf band first (at the top), then the peek line, an optional message line, up to three transfer
+/// rows, the Note button.
 public func restBodyHeight(transfers: Int, shelf: Bool, message: Bool) -> Double {
-    var h = RestBody.topPad + RestBody.line
+    var h = RestBody.topPad
+    if shelf { h += ShelfBand.height }
+    h += RestBody.line
     if message { h += RestBody.gap + RestBody.line }
     h += Double(min(RestBody.maxTransfers, max(0, transfers))) * (RestBody.gap + RestBody.transferRow)
-    if shelf { h += RestBody.gap + RestBody.shelfRow }
     h += RestBody.gap + RestBody.button + RestBody.bottomPad
     return h
 }
 
 /// The island's size for what it shows. Compact = the notch plus two wings; expanded grows below it.
 /// v0.2.0: `trayH` = the host's tray is open and this tall below the notch → the black shape IS the tray.
-/// v0.3.0: a rest view with a badge keeps the wings so the count is visible. Shelf chips and transfer rows add height
-/// only while that body is showing. `dropHover` widens the same shape so a drag has a target.
-public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: NotchMetrics, trayH: Double? = nil, trayW: Double = Layout.trayW, shelfRows: Int = 0, transferRows: Int = 0, dropHover: Bool = false, forceWing: Bool = false, messageRow: Bool = false) -> IslandSize {
+/// v0.3.2: closed, the island is the bare notch unless `wingsLive` (a transfer, Brain working or asking, a meeting,
+/// the moves intro). A badge or parked files no longer widen it. `shelfRows` > 0 adds the shelf band: at the top of
+/// the rest / moves body, or under a sized tray. `dropHover` widens the same shape so a drag has a target.
+public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: NotchMetrics, trayH: Double? = nil, trayW: Double = Layout.trayW, shelfRows: Int = 0, transferRows: Int = 0, dropHover: Bool = false, transferLive: Bool = false, messageRow: Bool = false) -> IslandSize {
     let nw = notch.width
     let nh = notch.height
     let compactW = min(Layout.trayW, nw + 2 * Layout.wing)
+    let bare = IslandSize(w: nw, h: nh, r: notch.hasNotch ? 9 : nh / 2)
     func widen(_ s: IslandSize) -> IslandSize {
         guard dropHover else { return s }
         let w = min(Layout.canvasW - 2 * Layout.shoulder - 8, s.w + Layout.dropPad)
         return IslandSize(w: w, h: s.h, r: s.r)
     }
     if tray {
-        if let th = trayH, th > 0 { return widen(IslandSize(w: max(compactW, min(Layout.canvasW - 2 * Layout.shoulder - 8, trayW)), h: nh + min(Layout.trayMaxH, th), r: Layout.trayR)) }
+        if let th = trayH, th > 0 {
+            let band = shelfRows > 0 ? ShelfBand.height : 0
+            return widen(IslandSize(w: max(compactW, min(Layout.canvasW - 2 * Layout.shoulder - 8, trayW)), h: min(Layout.canvasH - 40, nh + min(Layout.trayMaxH, th) + band), r: Layout.trayR))
+        }
         return widen(IslandSize(w: Layout.trayW, h: nh, r: 0))
     }
     if v.isRest {
@@ -120,10 +130,13 @@ public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: Notch
             let w = (s || t > 0) ? min(Layout.trayW, max(compactW, Layout.deckW)) : compactW
             return widen(IslandSize(w: w, h: min(nh + extra, Layout.canvasH - 40), r: 16))
         }
-        if (v.badge ?? 0) > 0 || forceWing { return widen(IslandSize(w: compactW, h: nh, r: min(12, nh / 2))) }
-        return widen(IslandSize(w: nw, h: nh, r: notch.hasNotch ? 9 : nh / 2))
+        if transferLive { return widen(IslandSize(w: compactW, h: nh, r: min(12, nh / 2))) }
+        return widen(bare)
     }
-    if !expanded { return widen(IslandSize(w: compactW, h: nh, r: min(12, nh / 2))) }
+    if !expanded {
+        if wingsLive(v, transferLive: transferLive) { return widen(IslandSize(w: compactW, h: nh, r: min(12, nh / 2))) }
+        return widen(bare)
+    }
     switch v.mode {
     case "ask":
         return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.askW)), h: nh + Layout.askExtra, r: 22))
@@ -131,13 +144,14 @@ public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: Notch
         return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.meetW)), h: nh + Layout.meetExtra, r: 20))
     case "moves":
         let n = min(3, max(1, v.moves?.count ?? 1))
-        // v0.3.1: the moves body shows the moves only (the shelf and transfers live in the rest body)
-        let extra = Layout.movesPad + Double(n) * Layout.moveRow
+        // v0.3.2: the shelf band sits above the moves while he has parked files
+        let extra = Layout.movesPad + Double(n) * Layout.moveRow + (shelfRows > 0 ? ShelfBand.height : 0)
         return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.deckW)), h: min(nh + extra, Layout.canvasH - 40), r: 20))
     case "capture":
         return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.deckW)), h: nh + Layout.captureExtra, r: 20))
     default:
-        return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.deckW)), h: nh + Layout.deckExtra, r: 20))
+        let band = shelfRows > 0 ? ShelfBand.height : 0
+        return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.deckW)), h: nh + Layout.deckExtra + band, r: 20))
     }
 }
 

@@ -35,25 +35,33 @@ final class IslandModel: ObservableObject {
     var onDragShelf: ((String) -> Void)?
     var onShelfClick: ((String) -> Void)?
     var onDismissTransfer: ((String) -> Void)?
+    var onRevealShelf: (() -> Void)?
 
     var shownTransfers: [Transfer] { Array(transfers.prefix(RestBody.maxTransfers)) }
 
     var showsMessage: Bool { !(shelfMessage ?? "").isEmpty }
 
-    /// Shelf thumbnails (one row) and transfer rows that are actually in the body. Only the rest body has them.
+    /// v0.3.2: where the shelf thumbnails are drawn now (top of the open rest / moves body, or under a sized tray).
+    var shelfAt: ShelfPlace {
+        shelfPlace(view, expanded: expanded, tray: tray, trayH: trayH, count: shelf.count)
+    }
+
+    /// Shelf band and transfer rows that are actually drawn. Transfer rows live in the rest body only.
     var bodyExtras: (shelf: Int, transfers: Int) {
-        guard expanded, !tray, view.isRest else { return (0, 0) }
-        return (shelf.isEmpty ? 0 : 1, shownTransfers.count)
+        let s = shelfAt == .none ? 0 : 1
+        guard expanded, !tray, view.isRest else { return (s, 0) }
+        return (s, shownTransfers.count)
     }
 
     var size: IslandSize {
         let e = bodyExtras
         let message = expanded && !tray && view.isRest && showsMessage
-        return islandSize(view, expanded: expanded, tray: tray, notch: notch, trayH: trayH, trayW: trayW, shelfRows: e.shelf, transferRows: e.transfers, dropHover: dropHover, forceWing: !shelf.isEmpty || wingTransfer != nil, messageRow: message)
+        return islandSize(view, expanded: expanded, tray: tray, notch: notch, trayH: trayH, trayW: trayW, shelfRows: e.shelf, transferRows: e.transfers, dropHover: dropHover, transferLive: wingTransfer != nil, messageRow: message)
     }
 
+    /// v0.3.2: wings only for live things (see `wingsLive`). At rest the island is the bare notch.
     var showsWings: Bool {
-        !view.isRest || (view.badge ?? 0) > 0 || !shelf.isEmpty || wingTransfer != nil
+        wingsLive(view, transferLive: wingTransfer != nil)
     }
 }
 
@@ -166,6 +174,15 @@ struct IslandContent: View {
                     detail(v)
                         .transition(.opacity.combined(with: .offset(y: -6)))
                 }
+                if model.shelfAt == .trayBottom {
+                    // the host's page draws the tray body; the shelf band sits right under it
+                    Color.clear
+                        .frame(height: max(0, min(Layout.trayMaxH, model.trayH ?? 0)))
+                        .allowsHitTesting(false)
+                    shelfBand
+                        .padding(.horizontal, 16)
+                        .transition(.opacity)
+                }
                 Spacer(minLength: 0)
             }
             .frame(width: s.w, height: s.h, alignment: .top)
@@ -190,6 +207,7 @@ struct IslandContent: View {
                     .frame(width: Layout.wing - 8, alignment: .center)
                 Spacer(minLength: model.notch.width)
                 rightWing(v)
+                    .minimumScaleFactor(0.8)
                     .frame(width: Layout.wing - 8, alignment: .center)
             }
             .padding(.horizontal, 4)
@@ -203,11 +221,11 @@ struct IslandContent: View {
         if v.mode == "moves" { return "plan" }
         if v.mode == "capture" { return "capture" }
         if model.wingTransfer != nil { return "export" }
-        if !model.shelf.isEmpty { return "shelf" }
         return nil
     }
 
-    /// Meeting countdown, then a transfer bar, then the shelf count, then the move count, then the host's word.
+    /// Meeting countdown, then a transfer bar, then the clock, then the host's word. v0.3.2: no shelf or move count
+    /// (those are not live; the open body shows them).
     @ViewBuilder
     func rightWing(_ v: IslandView) -> some View {
         if v.mode == "meeting", let start = v.meeting?.startsAt {
@@ -221,16 +239,6 @@ struct IslandContent: View {
                 TransferBar(fraction: t.state == "done" ? 1 : t.fraction)
                     .frame(height: 2)
             }
-        } else if !model.shelf.isEmpty {
-            Text("\(model.shelf.count)")
-                .font(.system(size: 11.5, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundColor(Color.white.opacity(0.78))
-        } else if v.isRest, let b = v.badge, b > 0 {
-            Text("\(b)")
-                .font(.system(size: 11.5, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundColor(Color.white.opacity(0.78))
         } else if let start = v.startedAt {
             ClockView(startedAt: start, endedAt: v.endedAt)
         } else if let w = v.word {
@@ -357,6 +365,9 @@ struct IslandContent: View {
     @ViewBuilder
     func movesDetail(_ v: IslandView) -> some View {
         VStack(alignment: .leading, spacing: 4) {
+            if model.shelfAt == .top {
+                shelfBand
+            }
             ForEach(Array((v.moves ?? []).prefix(3).enumerated()), id: \.element.id) { _, m in
                 Button {
                     Emit.send("action", ["id": "open", "ask": m.id])
@@ -431,6 +442,10 @@ struct IslandContent: View {
     @ViewBuilder
     func restDetail(_ v: IslandView) -> some View {
         VStack(alignment: .leading, spacing: RestBody.gap) {
+            if model.shelfAt == .top {
+                shelfBand
+                    .padding(.bottom, CGFloat(-RestBody.gap))
+            }
             Text(restPeekText(peek: v.peek, badge: v.badge))
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundColor(Color.white.opacity(0.5))
@@ -444,7 +459,6 @@ struct IslandContent: View {
                     .frame(height: RestBody.line)
             }
             transferRows
-            shelfStrip
             Button("Note") { model.onOpenCapture?(nil) }
                 .buttonStyle(PillButton())
                 .frame(height: RestBody.button)
@@ -457,6 +471,10 @@ struct IslandContent: View {
     @ViewBuilder
     func deckDetail(_ v: IslandView) -> some View {
         VStack(alignment: .leading, spacing: 3) {
+            if model.shelfAt == .top {
+                shelfBand
+                    .padding(.horizontal, -4)
+            }
             if let last = v.last, !last.isEmpty {
                 Text(redactMoney(last))
                     .font(.system(size: 12))
@@ -517,6 +535,36 @@ struct IslandContent: View {
         if t.state == "done" { return "\(doneWord(kind: t.kind, publishedComplete: t.publishedComplete)) · \(amount)" }
         if let total = t.total, total > 0 { return "\(amount) / \(formatBytes(total))" }
         return "\(t.kind) · \(amount)"
+    }
+
+    /// v0.3.2: the shelf band, exactly `ShelfBand.height` tall: "Shelf · N" and Show in Finder, then the thumbnails,
+    /// then a gap. Drawn at the top of the open rest / moves body and under a sized tray.
+    @ViewBuilder
+    var shelfBand: some View {
+        if !model.shelf.isEmpty {
+            VStack(alignment: .leading, spacing: ShelfBand.gap) {
+                HStack(spacing: 6) {
+                    Text(model.shelf.count == 1 ? "Shelf · 1 file" : "Shelf · \(model.shelf.count) files")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color.white.opacity(0.5))
+                        .lineLimit(1)
+                    Spacer(minLength: 4)
+                    Button {
+                        model.onRevealShelf?()
+                    } label: {
+                        Text("Show in Finder")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.7))
+                            .lineLimit(1)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .frame(height: ShelfBand.header)
+                shelfStrip
+            }
+            .padding(.bottom, ShelfBand.gap)
+            .frame(height: ShelfBand.height, alignment: .top)
+        }
     }
 
     /// v0.3.1: one row of thumbnails (images and videos show a real frame), the name under each, × on hover.

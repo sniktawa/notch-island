@@ -104,7 +104,9 @@ final class IslandController {
             return self.model.focusCapture && self.model.view.mode == "capture"
         }
         panel.isFloatingPanel = true
-        panel.level = NSWindow.Level(rawValue: NSWindow.Level.mainMenu.rawValue + 3)
+        // above the menu bar and its status items (statusBar is 25, this is 27); clicks are taken only over the drawn
+        // shape (see `islandHit`), everything else is click-through
+        panel.level = NSWindow.Level(rawValue: NSWindow.Level.statusBar.rawValue + 2)
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary, .ignoresCycle]
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -180,6 +182,7 @@ final class IslandController {
         }
         model.onShelfClick = { [weak self] id in self?.openCapture(shelf: id) }
         model.onDismissTransfer = { [weak self] id in self?.watch.dismiss(id: id) }
+        model.onRevealShelf = { [weak self] in self?.revealShelfFolder() }
     }
 
     func EmitAction(_ id: String, ask: String) {
@@ -550,6 +553,17 @@ final class IslandController {
         relayout(animated: true)
     }
 
+    /// v0.3.2: Show in Finder opens the shelf folder itself (nothing is emitted; it reads nothing and sends nothing).
+    func revealShelfFolder() {
+        guard let dir = shelf.directoryURL else { return }
+        if let first = shelf.items.last(where: { !$0.missing && !$0.linked }), FileManager.default.fileExists(atPath: first.path) {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: first.path)])
+        } else {
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            NSWorkspace.shared.open(dir)
+        }
+    }
+
     func emitShelf(_ op: String, _ item: ShelfItem) {
         Emit.send("shelf", ["op": op, "id": item.id, "name": item.name, "path": item.path, "bytes": item.bytes, "linked": item.linked])
     }
@@ -683,23 +697,19 @@ final class IslandController {
         let y = Double(p.y - panel.frame.minY)
         let cw = Double(canvas.width)
         let ch = Double(canvas.height)
-        let size = model.size
-        let isl = islandRect(size, canvasW: cw, canvasH: ch)
-        let notch = notchRect(model.notch, canvasW: cw, canvasH: ch)
-        let inShape = isl.contains(x, min(y, ch - 0.01), pad: accepting ? 4 : 0)
-        let inNotch = notch.contains(x, min(y, ch - 0.01))
-        let trayBody = model.tray && (model.trayH ?? 0) > 0 && inShape && !inNotch
-        let compactVisible = model.showsWings || model.tray
-        let inHot = inNotch || (compactVisible && inShape && !trayBody)
         let down = NSEvent.pressedMouseButtons != 0
-        var take = (inShape || inNotch) && !trayBody
-        if down && inNotch { take = true }
+        // v0.3.2: the strip across the top of an open tray (and its wings) and the shelf band take clicks; only the
+        // host's tray body passes them on. 0.3.1 passed the whole tray minus the notch, so a click on a wing
+        // reached the menu-bar item behind it.
+        let hit = islandHit(x: x, y: y, size: model.size, notch: model.notch, wings: model.showsWings, tray: model.tray, trayH: model.trayH, accepting: accepting, buttonDown: down, canvasW: cw, canvasH: ch)
+        let take = hit.take
+        let inHot = hit.inHot
         if take != accepting {
             accepting = take
             panel.ignoresMouseEvents = !take
         }
         let now = ProcessInfo.processInfo.systemUptime
-        if let change = gate.update(x: x, y: y, t: now, inHot: inHot, inShape: isl.contains(x, min(y, ch - 0.01), pad: 6) || inNotch, buttonDown: down) {
+        if let change = gate.update(x: x, y: y, t: now, inHot: inHot, inShape: hit.inShape, buttonDown: down) {
             switch change {
             case .enter: Emit.send("hover")
             case .leave:

@@ -118,13 +118,13 @@ final class V031Tests: XCTestCase {
         XCTAssertGreaterThanOrEqual(wide.w, 32 + Double(RestBody.maxTiles) * (RestBody.tileW + 8))
     }
 
-    // Moves show only moves: shelf rows do not change the moves body.
-    func testMovesBodyIgnoresShelf() {
+    // v0.3.2: the moves body carries the shelf band on top while files are parked.
+    func testMovesBodyAddsShelfBand() {
         let notch = NotchMetrics(width: 185, height: 32, hasNotch: true)
         let v = IslandView(mode: "moves", moves: [MoveInfo(id: "m1", title: "a"), MoveInfo(id: "m2", title: "b")])
         let a = islandSize(v, expanded: true, tray: false, notch: notch)
         let b = islandSize(v, expanded: true, tray: false, notch: notch, shelfRows: 1)
-        XCTAssertEqual(a, b)
+        XCTAssertEqual(b.h, a.h + ShelfBand.height)
         XCTAssertGreaterThanOrEqual(a.h, 32 + 6 + 2 * Layout.moveRow)
     }
 

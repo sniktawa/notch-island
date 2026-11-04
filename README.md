@@ -16,6 +16,13 @@ app) that wants a native-feeling notch surface without writing AppKit itself.
   Join, morning moves, a one-line capture field, a file shelf, transfer progress, and a tray edge for a host panel.
 - v0.2.0: `{"t":"tray","open":true,"w":…,"h":…}` makes the black shape the host's tray itself. Hovering a resting
   notch peeks. `ready` reports `caps` and `version`.
+- v0.3.2: at rest the island is the bare notch. Wings (56 pt each, was 64) appear only for something live: a transfer
+  (and its 6 s done), Brain working or asking, a meeting countdown, the moves while the host holds them `open` (the
+  daily intro). A `badge`, parked files, and the moves outside their intro no longer widen it; the moves show in the
+  hovered body. Every drawn piece takes clicks (the strip across the top of a sized tray, its wings, the shelf band);
+  only the host's tray body passes clicks to the host's window. The shelf band ("Shelf · N files", Show in Finder,
+  thumbnails with the name under, × on hover, drag out) sits at the top of the open rest / moves / deck body, and
+  under a sized tray. A drop opens it for 2.5 s. The canvas is 580 pt tall (was 480); `trayMaxH` stays 400.
 - v0.3.1: only a file that grows after the helper starts is a transfer (files already there, and Finder moves or
   renames, are a silent baseline). The wing shows a finished transfer for 6 s; the open tray keeps it 2 minutes. The list is
   published only when it changes, and the 1 s tick stops when nothing is active. Shelf chips are thumbnails (Quick Look).
@@ -53,7 +60,7 @@ Helper → host:
 
 | Event | When |
 | --- | --- |
-| `ready` | Once. `v` is 1. `version` is `0.3.1`. `caps` lists what this build can do. `frame`, `display`, `scale`, `displayFrame`, and `origin` (`appkit-bottom-left`) locate the panel. |
+| `ready` | Once. `v` is 1. `version` is `0.3.2`. `caps` lists what this build can do. `frame`, `display`, `scale`, `displayFrame`, and `origin` (`appkit-bottom-left`) locate the panel. |
 | `screen` | The panel moved. Same frame fields as `ready`. |
 | `settled` | An opening spring finished. `w` and `h` are the island size in points. Fade a host tray in on this, not on a timer. |
 | `hover` / `leave` / `click` | The cursor rested, left, or clicked the body (not a button). |
