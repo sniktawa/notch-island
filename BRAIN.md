@@ -55,7 +55,9 @@ If `keys` is set (`⌃⌥Y · ⌃⌥N`), the helper registers those chords only 
 {"t":"shelfDir","path":"/Users/arnie/Library/Application Support/Brain/shelf"}
 ```
 
-Until that line arrives, the helper uses the same default path. On `ready`, send `shelf` with the chips you still know about. Paths outside the directory are ignored.
+Until that line arrives, the helper uses the same default path. On `ready`, send `shelf` with the chips you still know about. Paths outside the directory are ignored, so a linked chip (a big file or a folder) is not restored after a restart.
+
+The folder must be a dedicated one. The disk root, `/Users`, the home folder, and any folder directly inside it (Desktop, Documents, Downloads, Library) are refused and the previous folder stays. A copy always gets a fresh name (`PO 2.pdf`), so nothing already in the folder is replaced. Deleting a chip deletes only the shelf's own copy, never a linked original. Copies run off the main thread. A drag out never replaces a file at the drop target either.
 
 A drop emits `shelf` `op` `add`. Dragging a chip out emits `dragged` and leaves the chip. `remove` means he deleted the chip. A file over about 2 GB, or a folder, is linked (`linked: true`) instead of copied.
 
