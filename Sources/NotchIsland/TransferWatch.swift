@@ -194,7 +194,14 @@ final class TransferWatch {
                         items[path] = row
                         events.append(TransferEvent(transfer: row, quiet: true))
                     }
-                } else if items[path] == nil {
+                } else if items[path] != nil {
+                    // a finished row whose file was moved or deleted in Finder just leaves
+                    let row = items.removeValue(forKey: path)
+                    stillSince.removeValue(forKey: path)
+                    dropProgress(path)
+                    _ = row
+                    gate.forget(path: path)
+                } else {
                     if let final = finalNameForTemp(path), gate.candidates[path] != nil {
                         gate.expect(finalPath: final, now: now)
                         if FileManager.default.fileExists(atPath: final), let ev = sight(final, apps: apps, now: now) { events.append(ev) }

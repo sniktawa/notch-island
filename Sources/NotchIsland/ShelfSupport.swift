@@ -349,7 +349,7 @@ final class ShelfChipView: NSView {
     override func mouseExited(with event: NSEvent) { hovering = false }
 
     private var tileRect: NSRect {
-        let side = min(bounds.width, RestBody.tile)
+        let side = min(bounds.width, CGFloat(RestBody.tile))
         return NSRect(x: (bounds.width - side) / 2, y: 0, width: side, height: side)
     }
 
@@ -380,7 +380,7 @@ final class ShelfChipView: NSView {
             return
         }
         let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-        ThumbCache.shared.thumb(for: path, side: RestBody.tile, scale: scale) { [weak self] thumb in
+        ThumbCache.shared.thumb(for: path, side: CGFloat(RestBody.tile), scale: scale) { [weak self] thumb in
             guard let self, self.loadingPath == path else { return }
             self.apply(thumb)
         }

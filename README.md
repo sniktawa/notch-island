@@ -16,6 +16,10 @@ app) that wants a native-feeling notch surface without writing AppKit itself.
   Join, morning moves, a one-line capture field, a file shelf, transfer progress, and a tray edge for a host panel.
 - v0.2.0: `{"t":"tray","open":true,"w":…,"h":…}` makes the black shape the host's tray itself. Hovering a resting
   notch peeks. `ready` reports `caps` and `version`.
+- v0.3.1: only a file that grows after the helper starts is a transfer (files already there, and Finder moves or
+  renames, are a silent baseline). The wing shows a finished transfer for 6 s; the open tray keeps it 2 minutes. The list is
+  published only when it changes, and the 1 s tick stops when nothing is active. Shelf chips are thumbnails (Quick Look).
+  A finished transfer opens the body for 4 s at most; a drop holds it open 2.5 s. The moves body shows only the moves.
 - v0.3.0: three morning moves with a count, a meeting countdown (`startsAt`) whose Join action carries the meeting id,
   a file shelf (drag in, drag a copy back out), quick capture, and live progress for exports, downloads, Drive copies,
   and incoming AirDrop with Reveal in Finder. A repeated view with the same shape does not restart the spring.
@@ -49,7 +53,7 @@ Helper → host:
 
 | Event | When |
 | --- | --- |
-| `ready` | Once. `v` is 1. `version` is `0.3.0`. `caps` lists what this build can do. `frame`, `display`, `scale`, `displayFrame`, and `origin` (`appkit-bottom-left`) locate the panel. |
+| `ready` | Once. `v` is 1. `version` is `0.3.1`. `caps` lists what this build can do. `frame`, `display`, `scale`, `displayFrame`, and `origin` (`appkit-bottom-left`) locate the panel. |
 | `screen` | The panel moved. Same frame fields as `ready`. |
 | `settled` | An opening spring finished. `w` and `h` are the island size in points. Fade a host tray in on this, not on a timer. |
 | `hover` / `leave` / `click` | The cursor rested, left, or clicked the body (not a button). |

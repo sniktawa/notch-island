@@ -59,7 +59,7 @@ Until that line arrives, the helper uses the same default path. On `ready`, send
 
 The folder must be a dedicated one. The disk root, `/Users`, the home folder, and any folder directly inside it (Desktop, Documents, Downloads, Library) are refused and the previous folder stays. A copy always gets a fresh name (`PO 2.pdf`), so nothing already in the folder is replaced. Deleting a chip deletes only the shelf's own copy, never a linked original. Copies run off the main thread. A drag out never replaces a file at the drop target either.
 
-A drop emits `shelf` `op` `add`. Dragging a chip out emits `dragged` and leaves the chip. `remove` means he deleted the chip. A file over about 2 GB, or a folder, is linked (`linked: true`) instead of copied.
+A drop emits `shelf` `op` `add`. Since 0.3.1 a drop shows the file's thumbnail and no longer opens capture by itself; a click on the thumbnail does (and emits `capture` `op` `open` with `shelf`). Dragging a chip out emits `dragged` and leaves the chip. `remove` means he deleted the chip. A file over about 2 GB, or a folder, is linked (`linked: true`) instead of copied.
 
 He can type or speak a sentence about the file. That is a `capture` `submit` with `shelf` set to the chip id. Prepare the action and answer with an ask card. Do not send, and do not move the file into a business folder, until Allow.
 
