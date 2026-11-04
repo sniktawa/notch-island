@@ -565,7 +565,7 @@ final class IslandController {
     }
 
     func emitShelf(_ op: String, _ item: ShelfItem) {
-        Emit.send("shelf", ["op": op, "id": item.id, "name": item.name, "path": item.path, "bytes": item.bytes, "linked": item.linked])
+        Emit.send("shelf", item.eventFields(op))
     }
 
     func clearShelfMessageLater() {

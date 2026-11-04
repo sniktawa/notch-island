@@ -7,7 +7,7 @@ final class RestingShapeTests: XCTestCase {
     var bare: IslandSize { IslandSize(w: 185, h: 32, r: 9) }
 
     func testVersion() {
-        XCTAssertEqual(helperVersion, "0.3.2")
+        XCTAssertEqual(helperVersion, "0.3.3")
         XCTAssertEqual(protocolVersion, 1)
     }
 

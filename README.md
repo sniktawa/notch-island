@@ -16,6 +16,7 @@ app) that wants a native-feeling notch surface without writing AppKit itself.
   Join, morning moves, a one-line capture field, a file shelf, transfer progress, and a tray edge for a host panel.
 - v0.2.0: `{"t":"tray","open":true,"w":…,"h":…}` makes the black shape the host's tray itself. Hovering a resting
   notch peeks. `ready` reports `caps` and `version`.
+- v0.3.3: a copied drop's `shelf` `add` event carries `origin`, the original file's path, so Brain can offer "Move instead" (trash the original after a verified copy). Protocol 1 unchanged; older hosts ignore the key.
 - v0.3.2: at rest the island is the bare notch. Wings (56 pt each, was 64) appear only for something live: a transfer
   (and its 6 s done), Brain working or asking, a meeting countdown, the moves while the host holds them `open` (the
   daily intro). A `badge`, parked files, and the moves outside their intro no longer widen it; the moves show in the

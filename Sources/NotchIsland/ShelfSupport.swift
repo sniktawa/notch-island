@@ -80,7 +80,7 @@ final class ShelfStore {
                 reserved.insert(name)
                 pendingNames.insert(name)
                 let dest = URL(fileURLWithPath: directory).appendingPathComponent(name)
-                copies.append((source, ShelfItem(id: freshID(), name: name, path: dest.path, bytes: bytes, linked: false)))
+                copies.append((source, ShelfItem(id: freshID(), name: name, path: dest.path, bytes: bytes, linked: false, origin: source.path)))
             }
         }
         items.append(contentsOf: ready)

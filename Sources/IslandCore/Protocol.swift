@@ -19,7 +19,8 @@ import Foundation
 //   {"ev":"settled","w":520,"h":268}         the open spring finished
 //   {"ev":"hover"} / {"ev":"leave"} / {"ev":"click"}
 //   {"ev":"action","id":"allow|deny|always|join|open|reveal","ask":"<id>"}
-//   {"ev":"shelf","op":"add|remove|dragged|missing","id":"...","name":"...","path":"...","bytes":1}
+//   {"ev":"shelf","op":"add|remove|dragged|missing","id":"...","name":"...","path":"...","bytes":1,"origin":"..."}
+//                                            (0.3.3: `origin` = where a copied drop came from; absent for links/restores)
 //   {"ev":"capture","op":"open|submit|speech|cancel","id":"...","text":"...","shelf":"...","on":true}
 //   {"ev":"progress","id":"...","state":"active|done|missing","kind":"export|download|drive|airdrop",...}
 //   {"ev":"pong"}
@@ -29,7 +30,7 @@ import Foundation
 // process emits. It never sends, books, or pays.
 
 public let protocolVersion = 1
-public let helperVersion = "0.3.2"
+public let helperVersion = "0.3.3"
 /// what this build can do beyond protocol 1 (the host checks these before relying on them)
 public let capabilities = ["traySize", "peek", "peekText", "countdown", "screenFrame", "settled", "moves", "shelf", "capture", "progress"]
 
@@ -114,14 +115,25 @@ public struct ShelfItem: Equatable {
     public var bytes: Double
     public var linked: Bool
     public var missing: Bool
+    /// 0.3.3: the dropped file's original path (copies only). Sent with `add` so the host can offer "Move instead"
+    /// (trash the original after a verified copy). Not persisted: a restored shelf has no origin.
+    public var origin: String?
 
-    public init(id: String, name: String, path: String, bytes: Double = 0, linked: Bool = false, missing: Bool = false) {
+    public init(id: String, name: String, path: String, bytes: Double = 0, linked: Bool = false, missing: Bool = false, origin: String? = nil) {
         self.id = id
         self.name = name
         self.path = path
         self.bytes = bytes
         self.linked = linked
         self.missing = missing
+        self.origin = origin
+    }
+
+    /// The `shelf` event fields; `origin` only when known (older hosts ignore unknown keys).
+    public func eventFields(_ op: String) -> [String: Any] {
+        var f: [String: Any] = ["op": op, "id": id, "name": name, "path": path, "bytes": bytes, "linked": linked]
+        if let origin, !origin.isEmpty { f["origin"] = origin }
+        return f
     }
 }
 
