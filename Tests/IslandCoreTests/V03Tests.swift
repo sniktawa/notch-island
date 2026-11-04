@@ -3,7 +3,7 @@ import XCTest
 
 final class V03ProtocolTests: XCTestCase {
     func testVersionAndCaps() {
-        XCTAssertEqual(helperVersion, "0.3.2")
+        XCTAssertEqual(helperVersion, "0.3.3")
         XCTAssertEqual(protocolVersion, 1)
         for cap in ["traySize", "peek", "peekText", "countdown", "screenFrame", "settled", "moves", "shelf", "capture", "progress"] {
             XCTAssertTrue(capabilities.contains(cap), cap)
