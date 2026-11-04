@@ -10,7 +10,7 @@ var targets: [Target] = [
 
 #if os(macOS)
 products.append(.executable(name: "NotchIsland", targets: ["NotchIsland"]))
-targets.append(.executableTarget(name: "NotchIsland", dependencies: ["IslandCore"]))
+targets.append(.executableTarget(name: "NotchIsland", dependencies: ["IslandCore"], linkerSettings: [.linkedFramework("QuickLookThumbnailing")]))
 #endif
 
 let package = Package(

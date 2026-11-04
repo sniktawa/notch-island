@@ -69,11 +69,37 @@ public enum Layout {
     public static let dropPad = 8.0
 }
 
+/// v0.3.1: the open rest body, piece by piece. The view draws exactly these heights, so the shape always fits it.
+public enum RestBody {
+    public static let topPad = 2.0
+    public static let line = 16.0
+    public static let gap = 6.0
+    public static let transferRow = 36.0
+    /// one row of shelf thumbnails: a 44 pt tile, then the name
+    public static let shelfRow = 62.0
+    public static let tile = 44.0
+    public static let tileW = 56.0
+    public static let maxTiles = 5
+    public static let button = 24.0
+    public static let bottomPad = 12.0
+    public static let maxTransfers = 3
+}
+
+/// Peek line, an optional message line, up to three transfer rows, one row of shelf thumbnails, the Note button.
+public func restBodyHeight(transfers: Int, shelf: Bool, message: Bool) -> Double {
+    var h = RestBody.topPad + RestBody.line
+    if message { h += RestBody.gap + RestBody.line }
+    h += Double(min(RestBody.maxTransfers, max(0, transfers))) * (RestBody.gap + RestBody.transferRow)
+    if shelf { h += RestBody.gap + RestBody.shelfRow }
+    h += RestBody.gap + RestBody.button + RestBody.bottomPad
+    return h
+}
+
 /// The island's size for what it shows. Compact = the notch plus two wings; expanded grows below it.
 /// v0.2.0: `trayH` = the host's tray is open and this tall below the notch → the black shape IS the tray.
 /// v0.3.0: a rest view with a badge keeps the wings so the count is visible. Shelf chips and transfer rows add height
 /// only while that body is showing. `dropHover` widens the same shape so a drag has a target.
-public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: NotchMetrics, trayH: Double? = nil, trayW: Double = Layout.trayW, shelfRows: Int = 0, transferRows: Int = 0, dropHover: Bool = false, forceWing: Bool = false) -> IslandSize {
+public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: NotchMetrics, trayH: Double? = nil, trayW: Double = Layout.trayW, shelfRows: Int = 0, transferRows: Int = 0, dropHover: Bool = false, forceWing: Bool = false, messageRow: Bool = false) -> IslandSize {
     let nw = notch.width
     let nh = notch.height
     let compactW = min(Layout.trayW, nw + 2 * Layout.wing)
@@ -88,12 +114,10 @@ public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: Notch
     }
     if v.isRest {
         if expanded {
-            var extra = Layout.peekExtra
-            let s = min(3, max(0, shelfRows))
-            let t = min(3, max(0, transferRows))
-            if t > 0 { extra += 8 + Double(t) * Layout.transferRow }
-            if s > 0 { extra += 8 + Double(s) * Layout.shelfRow }
-            let w = (s + t > 0) ? min(Layout.trayW, max(compactW, Layout.deckW)) : compactW
+            let s = shelfRows > 0
+            let t = min(RestBody.maxTransfers, max(0, transferRows))
+            let extra = restBodyHeight(transfers: t, shelf: s, message: messageRow)
+            let w = (s || t > 0) ? min(Layout.trayW, max(compactW, Layout.deckW)) : compactW
             return widen(IslandSize(w: w, h: min(nh + extra, Layout.canvasH - 40), r: 16))
         }
         if (v.badge ?? 0) > 0 || forceWing { return widen(IslandSize(w: compactW, h: nh, r: min(12, nh / 2))) }
@@ -107,9 +131,8 @@ public func islandSize(_ v: IslandView, expanded: Bool, tray: Bool, notch: Notch
         return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.meetW)), h: nh + Layout.meetExtra, r: 20))
     case "moves":
         let n = min(3, max(1, v.moves?.count ?? 1))
-        var extra = Layout.movesPad + Double(n) * Layout.moveRow
-        let s = min(3, max(0, shelfRows))
-        if s > 0 { extra += 8 + Double(s) * Layout.shelfRow }
+        // v0.3.1: the moves body shows the moves only (the shelf and transfers live in the rest body)
+        let extra = Layout.movesPad + Double(n) * Layout.moveRow
         return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.deckW)), h: min(nh + extra, Layout.canvasH - 40), r: 20))
     case "capture":
         return widen(IslandSize(w: min(Layout.trayW, max(compactW, Layout.deckW)), h: nh + Layout.captureExtra, r: 20))

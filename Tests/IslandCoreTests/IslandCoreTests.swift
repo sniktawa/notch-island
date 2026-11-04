@@ -181,12 +181,12 @@ final class HoverTests: XCTestCase {
         XCTAssertLessThanOrEqual(huge.h, Layout.canvasH - 40)
         XCTAssertLessThanOrEqual(huge.w + 2 * Layout.shoulder, Layout.canvasW)
         let peek = islandSize(.rest, expanded: true, tray: false, notch: notch)
-        XCTAssertEqual(peek, IslandSize(w: 185 + 2 * Layout.wing, h: 32 + Layout.peekExtra, r: 16))
+        XCTAssertEqual(peek, IslandSize(w: 185 + 2 * Layout.wing, h: 32 + restBodyHeight(transfers: 0, shelf: false, message: false), r: 16))
         // the tray path keeps the same 9 elements (so it springs from the notch's path) and has shoulders
         let p = islandPath(tray, canvasW: Layout.canvasW, canvasH: Layout.canvasH)
         XCTAssertEqual(p.count, 9)
         if case let .move(x, y) = p[0] { XCTAssertEqual(x, Layout.canvasW / 2 - Layout.trayW / 2 - Layout.shoulder); XCTAssertEqual(y, Layout.canvasH) } else { XCTFail("move first") }
         XCTAssertTrue(capabilities.contains("traySize"))
-        XCTAssertEqual(helperVersion, "0.3.0")
+        XCTAssertEqual(helperVersion, "0.3.1")
     }
 }

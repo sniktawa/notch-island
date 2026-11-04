@@ -12,8 +12,10 @@ public struct Transfer: Equatable, Identifiable {
     public var updatedAt: Double
     /// true when NSProgress (not a guess) said the write finished
     public var publishedComplete: Bool
+    /// v0.3.1: when the row became done (or missing), seconds since 1970. The wing shows it for a few seconds only.
+    public var doneAt: Double?
 
-    public init(id: String, label: String, path: String, kind: String, state: String, bytes: Double, total: Double? = nil, fraction: Double? = nil, updatedAt: Double = 0, publishedComplete: Bool = false) {
+    public init(id: String, label: String, path: String, kind: String, state: String, bytes: Double, total: Double? = nil, fraction: Double? = nil, updatedAt: Double = 0, publishedComplete: Bool = false, doneAt: Double? = nil) {
         self.id = id
         self.label = label
         self.path = path
@@ -24,6 +26,7 @@ public struct Transfer: Equatable, Identifiable {
         self.fraction = fraction
         self.updatedAt = updatedAt
         self.publishedComplete = publishedComplete
+        self.doneAt = doneAt
     }
 }
 

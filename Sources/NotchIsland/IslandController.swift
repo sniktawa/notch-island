@@ -86,6 +86,12 @@ final class IslandController {
     var readBuffer = LineBuffer()
     var deferred: IslandView?
     var heldDone: [String] = []
+    /// v0.3.1: every row the watcher holds; the model gets only what is on screen now
+    var allTransfers: [Transfer] = []
+    var transferGen = 0
+    var pingGen = 0
+    var dropGen = 0
+    var dropHeld = false
     var previousApp: NSRunningApplication?
     var screen: NSScreen?
     let canvas = NSSize(width: Layout.canvasW, height: Layout.canvasH)
@@ -173,6 +179,7 @@ final class IslandController {
             Emit.send("shelf", fields)
         }
         model.onShelfClick = { [weak self] id in self?.openCapture(shelf: id) }
+        model.onDismissTransfer = { [weak self] id in self?.watch.dismiss(id: id) }
     }
 
     func EmitAction(_ id: String, ask: String) {
@@ -323,7 +330,7 @@ final class IslandController {
         let wasRest = model.view.isRest
         model.view = v
         if v.isRest != wasRest && v.isRest { gate.reset() }
-        model.expanded = gate.hovering || (v.open ?? false) || model.pingProgress
+        model.expanded = wantExpanded()
         if focus { beginCaptureFocus() }
         relayout(animated: true)
         syncHotKeys()
@@ -337,14 +344,54 @@ final class IslandController {
         model.trayH = newH
         if let w = w { model.trayW = w }
         if !open { gate.reset() }
-        model.expanded = gate.hovering || (model.view.open ?? false) || model.pingProgress
+        model.expanded = wantExpanded()
         relayout(animated: true)
     }
 
-    func setDropHover(_ on: Bool) {
-        guard model.dropHover != on else { return }
-        model.dropHover = on
+    /// v0.3.1: the one rule for open or closed. Nothing sets `model.expanded` any other way.
+    func wantExpanded() -> Bool {
+        wantsExpanded(hovering: gate.hovering, hostOpen: model.view.open ?? false, ping: model.pingProgress && model.view.isRest, drop: model.dropActive)
+    }
+
+    func recomputeExpanded() {
+        let want = wantExpanded()
+        if want != model.expanded { model.expanded = want }
         relayout(animated: true)
+    }
+
+    /// Entering opens and holds the body for the drop. Exits shorter than `dragExitGrace` (the drag crossing between
+    /// subviews) are ignored, so the shape does not flicker.
+    func setDropHover(_ on: Bool) {
+        dropGen += 1
+        if on {
+            if !model.dropHover { model.dropHover = true }
+            model.dropActive = true
+            recomputeExpanded()
+            return
+        }
+        let gen = dropGen
+        DispatchQueue.main.asyncAfter(deadline: .now() + dragExitGrace) { [weak self] in
+            guard let self, gen == self.dropGen else { return }
+            self.model.dropHover = false
+            self.model.dropActive = self.dropHeld
+            self.recomputeExpanded()
+        }
+    }
+
+    /// After a drop the body stays open a moment so the new thumbnail is seen, then closes unless hovered.
+    func holdAfterDrop() {
+        dropGen += 1
+        let gen = dropGen
+        dropHeld = true
+        model.dropHover = false
+        model.dropActive = true
+        recomputeExpanded()
+        DispatchQueue.main.asyncAfter(deadline: .now() + dropHoldSeconds) { [weak self] in
+            guard let self, gen == self.dropGen else { return }
+            self.dropHeld = false
+            self.model.dropActive = false
+            self.recomputeExpanded()
+        }
     }
 
     func syncHotKeys() {
@@ -437,27 +484,32 @@ final class IslandController {
 
     // MARK: shelf
 
+    /// v0.3.1: a drop parks the file and shows its thumbnail. It no longer jumps into capture (and no longer takes
+    /// keyboard focus from Finder); a click on the thumbnail opens capture for it.
     func receiveFiles(_ urls: [URL]) {
-        setDropHover(false)
+        holdAfterDrop()
         shelf.accept(urls: urls) { [weak self] result in
             guard let self else { return }
             self.model.shelf = self.shelf.items
             self.model.shelfMessage = result.message
             for item in result.added { self.emitShelf("add", item) }
-            self.relayout(animated: true)
-            if let first = result.added.first { self.openCapture(shelf: first.id) }
+            self.holdAfterDrop()
             self.clearShelfMessageLater()
         }
     }
 
     func receivePromises(_ receivers: [NSFilePromiseReceiver]) {
-        setDropHover(false)
+        holdAfterDrop()
         guard let dir = shelf.directoryURL else {
             model.shelfMessage = "No shelf folder yet"
+            relayout(animated: true)
+            clearShelfMessageLater()
             return
         }
         if shelf.items.count >= shelfCap {
             model.shelfMessage = "shelf is full"
+            relayout(animated: true)
+            clearShelfMessageLater()
             return
         }
         for receiver in receivers {
@@ -479,10 +531,10 @@ final class IslandController {
                     if let item = self.shelf.adopt(copied: url) {
                         self.model.shelf = self.shelf.items
                         self.emitShelf("add", item)
-                        self.relayout(animated: true)
-                        self.openCapture(shelf: item.id)
+                        self.holdAfterDrop()
                     } else {
                         self.model.shelfMessage = "shelf is full"
+                        self.relayout(animated: true)
                         self.clearShelfMessageLater()
                     }
                 }
@@ -504,15 +556,17 @@ final class IslandController {
 
     func clearShelfMessageLater() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { [weak self] in
-            self?.model.shelfMessage = nil
+            guard let self, self.model.shelfMessage != nil else { return }
+            self.model.shelfMessage = nil
+            self.relayout(animated: true)
         }
     }
 
     // MARK: progress
 
     func transfersChanged(_ list: [Transfer], _ event: TransferEvent?) {
-        model.transfers = list
-        relayout(animated: true)
+        allTransfers = list
+        refreshTransferDisplay()
         guard let event else { return }
         if event.transfer.state == "active" || event.transfer.state == "done" || event.transfer.state == "missing" {
             emitProgress(event.transfer)
@@ -523,6 +577,23 @@ final class IslandController {
             } else {
                 pingDone(event.transfer)
             }
+        }
+    }
+
+    /// Push only what is on screen now into the model (the wing's done window, the tray's two minutes), and look
+    /// again when that answer next changes on its own. Equal values are not re-assigned, so nothing re-renders.
+    func refreshTransferDisplay() {
+        let now = Date().timeIntervalSince1970
+        let d = transferDisplay(allTransfers, now: now)
+        if model.transfers != d.tray { model.transfers = d.tray }
+        if model.wingTransfer != d.wing { model.wingTransfer = d.wing }
+        relayout(animated: true)
+        transferGen += 1
+        guard let next = d.nextChange else { return }
+        let gen = transferGen
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0.05, next - now + 0.05)) { [weak self] in
+            guard let self, gen == self.transferGen else { return }
+            self.refreshTransferDisplay()
         }
     }
 
@@ -545,13 +616,24 @@ final class IslandController {
         }
     }
 
+    /// A finished transfer opens the rest body for a few seconds, then it closes unless the cursor is on it.
     func pingDone(_ row: Transfer) {
         NSSound(named: NSSound.Name("Glass"))?.play()
         model.pingProgress = true
-        if model.view.isRest || model.view.mode == "moves" {
-            model.expanded = true
+        recomputeExpanded()
+        pingGen += 1
+        let gen = pingGen
+        DispatchQueue.main.asyncAfter(deadline: .now() + pingSeconds) { [weak self] in
+            guard let self, gen == self.pingGen else { return }
+            self.endPing()
         }
-        relayout(animated: true)
+    }
+
+    func endPing() {
+        pingGen += 1
+        guard model.pingProgress else { return }
+        model.pingProgress = false
+        recomputeExpanded()
     }
 
     func reveal(id: String, path: String) {
@@ -563,7 +645,7 @@ final class IslandController {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
         Emit.send("action", ["id": "reveal", "ask": id, "path": path])
         watch.dismiss(id: id)
-        model.pingProgress = model.transfers.contains { $0.state == "done" }
+        endPing()
     }
 
     func emitProgress(_ t: Transfer) {
@@ -622,11 +704,14 @@ final class IslandController {
             case .enter: Emit.send("hover")
             case .leave:
                 Emit.send("leave")
+                // leaving always ends the done ping, so it can never hold the island open
+                pingGen += 1
+                model.pingProgress = false
                 if model.focusCapture && model.captureDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     cancelCapture()
                 }
             }
-            let want = gate.hovering || (model.view.open ?? false) || model.pingProgress
+            let want = wantExpanded()
             if want != model.expanded {
                 model.expanded = want
                 relayout(animated: true)

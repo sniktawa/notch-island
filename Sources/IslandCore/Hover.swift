@@ -70,3 +70,17 @@ public struct HoverGate {
         leftAt = nil
     }
 }
+
+/// v0.3.1: the island is open while the cursor rests on it, while the host asks it open, for a few seconds after a
+/// transfer finishes (`ping`), and while a file is dragged over it plus a moment after the drop (`drop`).
+/// Nothing else holds it open, so it can never stay stuck expanded.
+public func wantsExpanded(hovering: Bool, hostOpen: Bool, ping: Bool, drop: Bool) -> Bool {
+    hovering || hostOpen || ping || drop
+}
+
+/// How long a finished transfer holds the body open when nobody hovers.
+public let pingSeconds = 4.0
+/// How long the island stays open after a drop (so the new thumbnail is seen).
+public let dropHoldSeconds = 2.5
+/// A drag that leaves for less than this (crossing between subviews) does not count as leaving.
+public let dragExitGrace = 0.25

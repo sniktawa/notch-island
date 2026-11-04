@@ -29,7 +29,7 @@ import Foundation
 // process emits. It never sends, books, or pays.
 
 public let protocolVersion = 1
-public let helperVersion = "0.3.0"
+public let helperVersion = "0.3.1"
 /// what this build can do beyond protocol 1 (the host checks these before relying on them)
 public let capabilities = ["traySize", "peek", "peekText", "countdown", "screenFrame", "settled", "moves", "shelf", "capture", "progress"]
 

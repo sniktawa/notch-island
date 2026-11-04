@@ -1,5 +1,6 @@
 import AppKit
 import IslandCore
+import QuickLookThumbnailing
 import UniformTypeIdentifiers
 
 /// Parked files. The helper copies (or links) them. Brain decides what a sentence about a file means.
@@ -222,48 +223,181 @@ final class DragHostView: NSView {
     }
 }
 
-/// One shelf chip. A small move starts a copy-drag. A click opens capture for this file.
+/// v0.3.1: thumbnails for shelf tiles. Quick Look renders off the main thread; results are cached per file.
+/// Images and videos get a real frame. Anything Quick Look cannot draw gets the file's Finder icon.
+final class ThumbCache {
+    static let shared = ThumbCache()
+    struct Thumb {
+        var image: NSImage
+        /// true for a real thumbnail (fill the tile), false for an icon (fit it)
+        var isPreview: Bool
+    }
+    private var cache: [String: Thumb] = [:]
+    private var order: [String] = []
+    private var waiting: [String: [(Thumb) -> Void]] = [:]
+
+    private func key(_ path: String) -> String {
+        let mod = (try? FileManager.default.attributesOfItem(atPath: path)[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        return path + "|" + String(mod)
+    }
+
+    /// Calls `done` on the main thread, at once when cached.
+    func thumb(for path: String, side: CGFloat, scale: CGFloat, done: @escaping (Thumb) -> Void) {
+        let k = key(path)
+        if let hit = cache[k] {
+            done(hit)
+            return
+        }
+        if waiting[k] != nil {
+            waiting[k]?.append(done)
+            return
+        }
+        waiting[k] = [done]
+        let url = URL(fileURLWithPath: path)
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: CGSize(width: side, height: side), scale: scale, representationTypes: .thumbnail)
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] rep, _ in
+            let image = rep?.nsImage
+            DispatchQueue.main.async {
+                guard let self else { return }
+                let thumb: Thumb
+                if let image {
+                    thumb = Thumb(image: image, isPreview: true)
+                } else {
+                    thumb = Thumb(image: NSWorkspace.shared.icon(forFile: path), isPreview: false)
+                }
+                self.store(k, thumb)
+                let calls = self.waiting.removeValue(forKey: k) ?? []
+                for c in calls { c(thumb) }
+            }
+        }
+    }
+
+    private func store(_ k: String, _ t: Thumb) {
+        cache[k] = t
+        order.append(k)
+        if order.count > 60 {
+            let old = order.removeFirst()
+            cache.removeValue(forKey: old)
+        }
+    }
+}
+
+/// One shelf tile: a rounded thumbnail, the name under it, × on hover. A small move starts a copy-drag (the
+/// thumbnail is the drag image). A click opens capture for this file.
 final class ShelfChipView: NSView {
-    var item = ShelfItem(id: "", name: "", path: "") { didSet { needsLayout = true } }
+    var item = ShelfItem(id: "", name: "", path: "") {
+        didSet {
+            if oldValue.path != item.path || oldValue.missing != item.missing || currentThumb == nil { loadThumb() }
+            needsLayout = true
+        }
+    }
+    var showsName = true { didSet { needsLayout = true } }
     var onRemove: () -> Void = {}
     var onDragged: () -> Void = {}
     var onClick: () -> Void = {}
+    private let tileView = NSView()
+    private let thumbLayer = CALayer()
     private let label = NSTextField(labelWithString: "")
     private let remove = NSButton(title: "×", target: nil, action: nil)
     private var down: NSPoint?
     private var promise: ShelfPromise?
+    private var currentThumb: ThumbCache.Thumb?
+    private var loadingPath: String?
+    private var hovering = false { didSet { remove.isHidden = !hovering || !showsName } }
+
+    override var isFlipped: Bool { true }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        label.textColor = .white
-        label.font = .systemFont(ofSize: 11.5, weight: .medium)
+        tileView.wantsLayer = true
+        tileView.layer?.cornerRadius = 8
+        tileView.layer?.masksToBounds = true
+        tileView.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.1).cgColor
+        thumbLayer.contentsGravity = .resizeAspectFill
+        thumbLayer.actions = ["contents": NSNull(), "bounds": NSNull(), "position": NSNull()]
+        tileView.layer?.addSublayer(thumbLayer)
+        addSubview(tileView)
+        label.textColor = NSColor.white.withAlphaComponent(0.75)
+        label.font = .systemFont(ofSize: 9.5, weight: .medium)
+        label.alignment = .center
         label.lineBreakMode = .byTruncatingMiddle
-        label.translatesAutoresizingMaskIntoConstraints = false
-        remove.translatesAutoresizingMaskIntoConstraints = false
+        label.maximumNumberOfLines = 1
+        label.cell?.truncatesLastVisibleLine = true
+        addSubview(label)
         remove.isBordered = false
-        remove.font = .systemFont(ofSize: 13, weight: .medium)
-        remove.contentTintColor = NSColor.white.withAlphaComponent(0.6)
+        remove.font = .systemFont(ofSize: 11, weight: .bold)
+        remove.contentTintColor = .white
+        remove.wantsLayer = true
+        remove.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.75).cgColor
+        remove.layer?.cornerRadius = 8
         remove.target = self
         remove.action = #selector(removeTapped)
-        addSubview(label)
+        remove.isHidden = true
+        remove.setAccessibilityLabel("Remove from shelf")
         addSubview(remove)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            remove.leadingAnchor.constraint(equalTo: label.trailingAnchor, constant: 4),
-            remove.trailingAnchor.constraint(equalTo: trailingAnchor),
-            remove.centerYAnchor.constraint(equalTo: centerYAnchor),
-            remove.widthAnchor.constraint(equalToConstant: 16),
-        ])
     }
 
     required init?(coder: NSCoder) { nil }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for a in trackingAreas { removeTrackingArea(a) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil))
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+
+    private var tileRect: NSRect {
+        let side = min(bounds.width, RestBody.tile)
+        return NSRect(x: (bounds.width - side) / 2, y: 0, width: side, height: side)
+    }
+
     override func layout() {
         super.layout()
-        let title = item.missing ? "\(item.name) · missing" : (item.linked ? "\(item.name) · linked" : item.name)
+        let tile = tileRect
+        tileView.frame = tile
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        thumbLayer.frame = tileView.bounds.insetBy(dx: currentThumb?.isPreview == false ? 6 : 0, dy: currentThumb?.isPreview == false ? 6 : 0)
+        CATransaction.commit()
+        label.isHidden = !showsName
+        label.frame = NSRect(x: 0, y: tile.maxY + 3, width: bounds.width, height: 13)
+        let title = item.missing ? "missing" : item.name
         if label.stringValue != title { label.stringValue = title }
-        label.textColor = item.missing ? NSColor.white.withAlphaComponent(0.4) : .white
+        remove.frame = NSRect(x: min(bounds.width - 16, tile.maxX - 10), y: max(0, tile.minY - 2), width: 16, height: 16)
+        remove.isHidden = !hovering || !showsName
+        alphaValue = item.missing ? 0.4 : 1
+        toolTip = item.linked ? "\(item.name) · linked" : item.name
+    }
+
+    private func loadThumb() {
+        let path = item.path
+        guard !path.isEmpty else { return }
+        loadingPath = path
+        guard FileManager.default.fileExists(atPath: path) else {
+            apply(ThumbCache.Thumb(image: NSWorkspace.shared.icon(forFile: path), isPreview: false))
+            return
+        }
+        let scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        ThumbCache.shared.thumb(for: path, side: RestBody.tile, scale: scale) { [weak self] thumb in
+            guard let self, self.loadingPath == path else { return }
+            self.apply(thumb)
+        }
+    }
+
+    private func apply(_ thumb: ThumbCache.Thumb) {
+        currentThumb = thumb
+        let scale = window?.backingScaleFactor ?? 2
+        thumbLayer.contentsScale = scale
+        thumbLayer.contentsGravity = thumb.isPreview ? .resizeAspectFill : .resizeAspect
+        var rect = NSRect(origin: .zero, size: thumb.image.size)
+        if let cg = thumb.image.cgImage(forProposedRect: &rect, context: nil, hints: nil) {
+            thumbLayer.contents = cg
+        } else {
+            thumbLayer.contents = thumb.image
+        }
+        needsLayout = true
     }
 
     @objc private func removeTapped() { onRemove() }
@@ -283,7 +417,8 @@ final class ShelfChipView: NSView {
         promise = source
         let provider = NSFilePromiseProvider(fileType: uti, delegate: source)
         let dragging = NSDraggingItem(pasteboardWriter: provider)
-        dragging.setDraggingFrame(bounds, contents: nil)
+        let image = currentThumb?.image ?? NSWorkspace.shared.icon(forFile: item.path)
+        dragging.setDraggingFrame(tileRect, contents: image)
         let session = beginDraggingSession(with: [dragging], event: event, source: source)
         session.draggingPasteboard.setString(URL(fileURLWithPath: item.path).absoluteString, forType: .fileURL)
     }

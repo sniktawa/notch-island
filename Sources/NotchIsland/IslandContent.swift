@@ -12,8 +12,13 @@ final class IslandModel: ObservableObject {
     @Published var trayW: Double = Layout.trayW
     @Published var notch = NotchMetrics(width: fakeNotchWidth, height: 32, hasNotch: false)
     @Published var shelf: [ShelfItem] = []
+    /// v0.3.1: rows for the open rest body (active, then done for two minutes), at most three
     @Published var transfers: [Transfer] = []
+    /// v0.3.1: the transfer the compact wing shows (active, or done for a few seconds), else nil
+    @Published var wingTransfer: Transfer?
     @Published var dropHover = false
+    /// a drag is over the island, or a drop just landed: hold the body open
+    @Published var dropActive = false
     @Published var shelfMessage: String?
     @Published var captureDraft = ""
     @Published var focusCapture = false
@@ -29,29 +34,26 @@ final class IslandModel: ObservableObject {
     var onRemoveShelf: ((String) -> Void)?
     var onDragShelf: ((String) -> Void)?
     var onShelfClick: ((String) -> Void)?
+    var onDismissTransfer: ((String) -> Void)?
 
-    var shownTransfers: [Transfer] { visibleTransfers(transfers) }
+    var shownTransfers: [Transfer] { Array(transfers.prefix(RestBody.maxTransfers)) }
 
-    /// Shelf chips and transfer rows that are actually in the body, not merely on the wing.
+    var showsMessage: Bool { !(shelfMessage ?? "").isEmpty }
+
+    /// Shelf thumbnails (one row) and transfer rows that are actually in the body. Only the rest body has them.
     var bodyExtras: (shelf: Int, transfers: Int) {
-        guard expanded, !tray else { return (0, 0) }
-        switch view.mode {
-        case "moves":
-            return (min(3, shelf.count), 0)
-        case "rest":
-            return (min(3, shelf.count), shownTransfers.count)
-        default:
-            return (0, 0)
-        }
+        guard expanded, !tray, view.isRest else { return (0, 0) }
+        return (shelf.isEmpty ? 0 : 1, shownTransfers.count)
     }
 
     var size: IslandSize {
         let e = bodyExtras
-        return islandSize(view, expanded: expanded, tray: tray, notch: notch, trayH: trayH, trayW: trayW, shelfRows: e.shelf, transferRows: e.transfers, dropHover: dropHover, forceWing: !shelf.isEmpty || !transfers.isEmpty)
+        let message = expanded && !tray && view.isRest && showsMessage
+        return islandSize(view, expanded: expanded, tray: tray, notch: notch, trayH: trayH, trayW: trayW, shelfRows: e.shelf, transferRows: e.transfers, dropHover: dropHover, forceWing: !shelf.isEmpty || wingTransfer != nil, messageRow: message)
     }
 
     var showsWings: Bool {
-        !view.isRest || (view.badge ?? 0) > 0 || !shelf.isEmpty || !transfers.isEmpty
+        !view.isRest || (view.badge ?? 0) > 0 || !shelf.isEmpty || wingTransfer != nil
     }
 }
 
@@ -200,7 +202,7 @@ struct IslandContent: View {
         if v.mode == "ask" { return "ask" }
         if v.mode == "moves" { return "plan" }
         if v.mode == "capture" { return "capture" }
-        if model.shownTransfers.first != nil { return "export" }
+        if model.wingTransfer != nil { return "export" }
         if !model.shelf.isEmpty { return "shelf" }
         return nil
     }
@@ -210,7 +212,7 @@ struct IslandContent: View {
     func rightWing(_ v: IslandView) -> some View {
         if v.mode == "meeting", let start = v.meeting?.startsAt {
             CountdownView(startsAt: start)
-        } else if let t = model.shownTransfers.first {
+        } else if let t = model.wingTransfer {
             VStack(spacing: 2) {
                 Text(t.state == "done" ? doneWord(kind: t.kind, publishedComplete: t.publishedComplete) : t.label)
                     .font(.system(size: 9, weight: .medium, design: .rounded))
@@ -378,10 +380,11 @@ struct IslandContent: View {
                         }
                         Spacer(minLength: 0)
                     }
+                    .frame(height: Layout.moveRow - 4)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
-            shelfChips
         }
         .padding(.horizontal, 16)
         .padding(.top, 6)
@@ -390,6 +393,20 @@ struct IslandContent: View {
 
     @ViewBuilder
     func captureDetail(_ v: IslandView) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            if let id = v.capture?.shelf, let item = model.shelf.first(where: { $0.id == id }) {
+                ShelfChip(item: item, showsName: false, onRemove: {}, onDragged: { model.onDragShelf?(item.id) }, onClick: {})
+                    .frame(width: RestBody.tile, height: RestBody.tile)
+            }
+            captureFields(v)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    func captureFields(_ v: IslandView) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(v.capture?.prompt ?? "Note, to-do, or reminder")
                 .font(.system(size: 11))
@@ -407,31 +424,33 @@ struct IslandContent: View {
                 }
             }
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    /// Every piece has the height `restBodyHeight` counts, so the shape always fits what is drawn.
     @ViewBuilder
     func restDetail(_ v: IslandView) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: RestBody.gap) {
             Text(restPeekText(peek: v.peek, badge: v.badge))
                 .font(.system(size: 11.5, weight: .medium))
                 .foregroundColor(Color.white.opacity(0.5))
                 .lineLimit(1)
+                .frame(height: RestBody.line)
             if let msg = model.shelfMessage, !msg.isEmpty {
                 Text(msg)
                     .font(.system(size: 11.5, weight: .medium))
                     .foregroundColor(Color.white.opacity(0.7))
                     .lineLimit(1)
+                    .frame(height: RestBody.line)
             }
             transferRows
-            shelfChips
+            shelfStrip
             Button("Note") { model.onOpenCapture?(nil) }
                 .buttonStyle(PillButton())
+                .frame(height: RestBody.button)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 2)
+        .padding(.top, RestBody.topPad)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -476,8 +495,19 @@ struct IslandContent: View {
                     }
                     .buttonStyle(PillButton(primary: t.state == "done"))
                     .disabled(t.state == "missing")
+                    Button {
+                        model.onDismissTransfer?(t.id)
+                    } label: {
+                        Text("×")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(Color.white.opacity(0.6))
+                            .frame(width: 16, height: 24)
+                    }
+                    .buttonStyle(.plain)
                 }
             }
+            .frame(height: RestBody.transferRow)
+            .clipped()
         }
     }
 
@@ -489,15 +519,24 @@ struct IslandContent: View {
         return "\(t.kind) · \(amount)"
     }
 
+    /// v0.3.1: one row of thumbnails (images and videos show a real frame), the name under each, × on hover.
     @ViewBuilder
-    var shelfChips: some View {
+    var shelfStrip: some View {
         if !model.shelf.isEmpty {
-            VStack(alignment: .leading, spacing: 4) {
-                ForEach(Array(model.shelf.prefix(3).enumerated()), id: \.element.id) { _, item in
-                    ShelfChip(item: item, onRemove: { model.onRemoveShelf?(item.id) }, onDragged: { model.onDragShelf?(item.id) }, onClick: { model.onShelfClick?(item.id) })
-                        .frame(height: 22)
+            HStack(alignment: .top, spacing: 8) {
+                ForEach(Array(model.shelf.suffix(RestBody.maxTiles).reversed().enumerated()), id: \.element.id) { _, item in
+                    ShelfChip(item: item, showsName: true, onRemove: { model.onRemoveShelf?(item.id) }, onDragged: { model.onDragShelf?(item.id) }, onClick: { model.onShelfClick?(item.id) })
+                        .frame(width: RestBody.tileW, height: RestBody.shelfRow)
                 }
+                if model.shelf.count > RestBody.maxTiles {
+                    Text("+\(model.shelf.count - RestBody.maxTiles)")
+                        .font(.system(size: 11.5, weight: .medium, design: .rounded))
+                        .foregroundColor(Color.white.opacity(0.6))
+                        .frame(height: RestBody.tile)
+                }
+                Spacer(minLength: 0)
             }
+            .frame(height: RestBody.shelfRow)
         }
     }
 }
@@ -634,6 +673,7 @@ final class MicHoldView: NSView {
 
 struct ShelfChip: NSViewRepresentable {
     var item: ShelfItem
+    var showsName = true
     var onRemove: () -> Void
     var onDragged: () -> Void
     var onClick: () -> Void
@@ -643,6 +683,7 @@ struct ShelfChip: NSViewRepresentable {
         v.onRemove = onRemove
         v.onDragged = onDragged
         v.onClick = onClick
+        v.showsName = showsName
         v.item = item
         return v
     }
@@ -651,6 +692,7 @@ struct ShelfChip: NSViewRepresentable {
         view.onRemove = onRemove
         view.onDragged = onDragged
         view.onClick = onClick
+        view.showsName = showsName
         view.item = item
     }
 }
